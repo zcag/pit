@@ -84,6 +84,11 @@ func (s *Server) routes() {
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
 		}
+		// ?p=<key> logs in from a plain link, not just the form.
+		if r.URL.Query().Get("p") != "" {
+			s.login(w, r)
+			return
+		}
 		writeLoginPage(w, "This board is yours alone.")
 	})
 	m.HandleFunc("POST /login", s.login)
