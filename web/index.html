@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pit</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%227%22%20fill%3D%22%2314171A%22%2F%3E%3Crect%20x%3D%227%22%20y%3D%2214%22%20width%3D%227%22%20height%3D%2211%22%20rx%3D%222.5%22%20fill%3D%22%236A7276%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%227%22%20width%3D%227%22%20height%3D%2218%22%20rx%3D%222.5%22%20fill%3D%22%23E0A800%22%2F%3E%3C%2Fsvg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Martian+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E7E9E6; --surface:#F8F9F7; --sunk:#DCDFDB; --card:#FFFFFF;
+  --ink:#14171A; --muted:#6A7276; --faint:#9AA1A4;
+  --rule:#C6CBC6; --hair:#D5D9D4;
+  --spark:#E0A800; --spark-ink:#231A00;
+  --cold:#54646F; --dead:#A2A8A3;
+  --shadow:0 1px 2px rgba(20,23,26,.07),0 3px 8px rgba(20,23,26,.05);
+  --lift:0 8px 24px rgba(20,23,26,.16);
+  --drop:0 16px 48px rgba(20,23,26,.2);
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1012; --surface:#14181A; --sunk:#0A0D0F; --card:#1B2023;
+    --ink:#E9EBE8; --muted:#8B9397; --faint:#5E686C;
+    --rule:#2A3134; --hair:#212729;
+    --spark:#F2C318; --spark-ink:#1A1400;
+    --cold:#7F909C; --dead:#4C5457;
+    --shadow:0 1px 2px rgba(0,0,0,.4); --lift:0 10px 28px rgba(0,0,0,.55); --drop:0 18px 56px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1012; --surface:#14181A; --sunk:#0A0D0F; --card:#1B2023;
+  --ink:#E9EBE8; --muted:#8B9397; --faint:#5E686C;
+  --rule:#2A3134; --hair:#212729;
+  --spark:#F2C318; --spark-ink:#1A1400;
+  --cold:#7F909C; --dead:#4C5457;
+  --shadow:0 1px 2px rgba(0,0,0,.4); --lift:0 10px 28px rgba(0,0,0,.55); --drop:0 18px 56px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Inter Tight",system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+button,input,textarea,select{font:inherit;color:inherit}
+
+.bar{flex:none;display:flex;align-items:center;gap:11px;height:52px;padding:0 14px;
+  border-bottom:1px solid var(--hair);background:var(--surface)}
+.mark{font-family:"Martian Mono",monospace;font-weight:700;font-size:16px;letter-spacing:-.07em;flex:none}
+.mark::after{content:"";display:inline-block;width:6px;height:6px;background:var(--spark);margin-left:6px;vertical-align:2px}
+.boardsel{position:relative;padding-left:11px;border-left:1px solid var(--rule)}
+.boardsel select{appearance:none;background:none;border:1px solid transparent;border-radius:6px;
+  padding:5px 25px 5px 8px;font-size:13.5px;font-weight:500;cursor:pointer;max-width:210px}
+.boardsel select:hover{border-color:var(--rule)}
+.boardsel::after{content:"";position:absolute;right:8px;top:50%;width:5px;height:5px;
+  border-right:1.5px solid var(--faint);border-bottom:1.5px solid var(--faint);
+  transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.bdesc{font-size:12.5px;color:var(--faint);max-width:30ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.bdesc:hover{color:var(--muted)}
+.bar-sp{flex:1}
+.state{display:flex;align-items:center;gap:7px;font-family:"JetBrains Mono",monospace;
+  font-size:11px;color:var(--muted);white-space:nowrap;cursor:default}
+.state .dot{width:7px;height:7px;border-radius:50%;background:var(--cold);flex:none}
+.state.settled{color:var(--ink)} .state.settled .dot{background:var(--spark)}
+.stat{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);white-space:nowrap}
+.ghost{background:none;border:1px solid var(--rule);color:var(--muted);padding:6px 10px;
+  border-radius:6px;cursor:pointer;font-size:12.5px;white-space:nowrap}
+.ghost:hover{color:var(--ink);border-color:var(--ink)}
+.ghost:focus-visible{outline:2px solid var(--spark);outline-offset:2px}
+.duel-btn{display:flex;align-items:center;gap:8px;flex:none;background:var(--spark);
+  color:var(--spark-ink);border:0;padding:8px 13px;border-radius:6px;cursor:pointer;
+  font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+.duel-btn:hover{filter:brightness(1.07)}
+.duel-btn[disabled]{opacity:.45;cursor:default}
+.duel-btn kbd{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:500;
+  background:color-mix(in srgb,var(--spark-ink) 15%,transparent);border-radius:3px;padding:2px 5px}
+
+.board{flex:1;min-height:0;display:grid;gap:0}
+.col{min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--hair);
+  background:var(--bg);transition:background .15s}
+.col:last-child{border-right:0}
+.col.is-terminal{background:color-mix(in srgb,var(--bg) 88%,var(--sunk))}
+.col.over{background:color-mix(in srgb,var(--spark) 11%,var(--bg))}
+.col-head{flex:none;display:flex;align-items:center;gap:8px;padding:13px 14px 9px}
+.col-name{font-family:"JetBrains Mono",monospace;font-size:10.5px;font-weight:500;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.col-n{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--faint)}
+.col-duel{margin-left:auto;background:none;border:0;cursor:pointer;padding:3px 6px;border-radius:4px;
+  color:var(--faint);line-height:1;font-family:"JetBrains Mono",monospace;font-size:9.5px;
+  letter-spacing:.13em;text-transform:uppercase;opacity:0;transition:opacity .15s}
+.col:hover .col-duel,.col-duel:focus-visible{opacity:1}
+.col-duel:hover{color:var(--spark-ink);background:var(--spark)}
+.col-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 14px;
+  display:flex;flex-direction:column;gap:7px}
+.col-body::-webkit-scrollbar{width:8px}
+.col-body::-webkit-scrollbar-thumb{background:var(--rule);border-radius:4px}
+.col-empty{font-size:12.5px;color:var(--faint);padding:13px 8px;border:1px dashed var(--rule);
+  border-radius:7px;text-align:center;line-height:1.4}
+
+.quick{flex:none;padding:0 10px 10px}
+.quick input{width:100%;background:var(--card);border:1px dashed var(--rule);border-radius:7px;
+  padding:9px 10px;font-size:13px;color:var(--ink)}
+.quick input::placeholder{color:var(--faint)}
+.quick input:focus{outline:none;border-style:solid;border-color:var(--spark);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--spark) 20%,transparent)}
+
+.card{background:var(--card);border:1px solid var(--hair);border-radius:7px;padding:9px 10px 8px;
+  cursor:grab;box-shadow:var(--shadow);text-align:left;width:100%;position:relative;
+  transition:box-shadow .15s,border-color .15s,opacity .18s}
+.card:hover{border-color:var(--rule);box-shadow:var(--lift)}
+.card:focus-visible{outline:2px solid var(--spark);outline-offset:2px}
+.card.dragging{opacity:.35;cursor:grabbing}
+.card.sel{border-color:var(--spark);box-shadow:0 0 0 1px var(--spark)}
+.card.contested{box-shadow:inset 2px 0 0 var(--spark),var(--shadow)}
+.card .t{font-size:13.5px;font-weight:500;line-height:1.32;letter-spacing:-.005em;margin:0 0 3px}
+.card .n{font-size:11.5px;color:var(--muted);line-height:1.36;margin:0}
+.card .f{display:flex;align-items:center;gap:7px;margin-top:8px;
+  font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--faint)}
+.card .src{width:5px;height:5px;border-radius:50%;background:var(--cold);flex:none}
+.card .src.agent{background:var(--spark)}
+.card .rt{margin-left:auto;white-space:nowrap}
+.card .rd{opacity:.6}
+.col.is-terminal .card{background:transparent;box-shadow:none;color:var(--dead);border-style:dashed}
+.col.is-terminal .card .n,.col.is-terminal .card .f{color:var(--dead)}
+.card .mv{position:absolute;top:8px;right:9px;font-family:"JetBrains Mono",monospace;
+  font-size:10px;font-weight:700;opacity:0;transition:opacity .3s}
+.card .mv.up{color:var(--spark);opacity:1}
+.card .mv.dn{color:var(--cold);opacity:1}
+.card.fresh{animation:land .55s cubic-bezier(.2,.7,.3,1)}
+@keyframes land{from{opacity:0;transform:translateY(-8px);box-shadow:0 0 0 3px var(--spark)}to{opacity:1;transform:none}}
+
+.duel{position:fixed;inset:0;z-index:120;background:var(--surface);display:flex;flex-direction:column;
+  opacity:0;pointer-events:none;transition:opacity .18s}
+.duel.on{opacity:1;pointer-events:auto}
+.duel-top{flex:none;display:flex;align-items:center;gap:12px;height:52px;padding:0 14px;border-bottom:1px solid var(--hair)}
+.duel-scope{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--faint)}
+.duel-stage{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1px 1fr}
+.side{border:0;background:none;text-align:left;cursor:pointer;
+  padding:clamp(20px,4vh,48px) clamp(22px,4vw,58px);display:flex;flex-direction:column;
+  justify-content:center;gap:13px;transition:background .16s,opacity .22s,transform .22s}
+.side:hover{background:color-mix(in srgb,var(--spark) 10%,transparent)}
+.side .src{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--faint)}
+.side .ttl{font-size:clamp(20px,3.1vw,36px);font-weight:600;line-height:1.14;letter-spacing:-.028em;margin:0}
+.side .note{font-size:clamp(13px,1.25vw,16px);color:var(--muted);margin:0;max-width:32ch}
+.side .body{font-size:13px;color:var(--muted);margin:0;max-width:40ch;line-height:1.5;
+  padding-left:11px;border-left:2px solid var(--hair)}
+.side .from{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--faint);margin-top:4px}
+.side.won{background:var(--spark);color:var(--spark-ink)}
+.side.won .src,.side.won .note,.side.won .from,.side.won .body{color:color-mix(in srgb,var(--spark-ink) 68%,transparent)}
+.side.lost{opacity:.2;transform:scale(.975)}
+.seam{background:var(--rule);position:relative}
+.seam::after{content:"vs";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-family:"Martian Mono",monospace;font-size:9px;font-weight:700;color:var(--faint);
+  background:var(--surface);padding:7px 4px}
+.duel-foot{flex:none;display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:11px 14px;
+  border-top:1px solid var(--hair);font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
+.meter{flex:1;min-width:100px;height:3px;background:var(--sunk);border-radius:2px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--cold);width:0;transition:width .35s}
+.meter i.done{background:var(--spark)}
+.pill{background:var(--spark);color:var(--spark-ink);padding:2px 8px;border-radius:3px;font-weight:500}
+.duel-done{grid-column:1/-1;display:flex;flex-direction:column;justify-content:center;
+  padding:clamp(24px,6vh,60px) clamp(24px,5vw,70px)}
+.duel-done h2{font-family:"Martian Mono",monospace;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.05em;margin:0 0 8px}
+.duel-done>p{color:var(--muted);margin:0 0 22px;max-width:54ch}
+.duel-done ol{margin:0 0 24px;padding:0;list-style:none;counter-reset:w;max-width:660px}
+.duel-done li{display:flex;gap:14px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--hair);
+  counter-increment:w;font-size:15px}
+.duel-done li::before{content:counter(w);font-family:"JetBrains Mono",monospace;font-size:11px;
+  color:var(--spark);font-weight:700;width:12px;flex:none}
+.duel-done li span{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);white-space:nowrap}
+.done-acts{display:flex;gap:10px;flex-wrap:wrap}
+
+.scrim{position:fixed;inset:0;z-index:130;background:rgba(10,13,15,.36);opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);z-index:140;background:var(--surface);
+  border-left:1px solid var(--rule);box-shadow:var(--drop);display:flex;flex-direction:column;
+  transform:translateX(102%);transition:transform .24s cubic-bezier(.2,.7,.3,1)}
+.drawer.on{transform:none}
+.dw-top{flex:none;display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--hair)}
+.bkchip{appearance:none;background:var(--sunk);border:1px solid var(--hair);border-radius:5px;padding:4px 9px;
+  font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);cursor:pointer}
+.srcchip{display:flex;align-items:center;gap:6px;font-family:"JetBrains Mono",monospace;font-size:10px;
+  letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
+.srcchip i{width:5px;height:5px;border-radius:50%;background:var(--cold)}
+.srcchip.agent i{background:var(--spark)}
+.dw-x{margin-left:auto;background:none;border:0;color:var(--faint);cursor:pointer;font-size:18px;
+  line-height:1;padding:2px 7px;border-radius:4px}
+.dw-x:hover{color:var(--ink);background:var(--sunk)}
+.dw-body{flex:1;min-height:0;overflow-y:auto;padding:16px 16px 22px}
+.dw-title,.dw-note{width:100%;background:none;border:0;padding:0;resize:none;overflow:hidden;display:block}
+.dw-title{font-size:20px;font-weight:600;line-height:1.24;letter-spacing:-.022em;margin:0 0 8px}
+.dw-note{font-size:13px;color:var(--muted);line-height:1.45;margin:0 0 16px}
+.dw-title:focus,.dw-note:focus{outline:none}
+.dw-stats{display:flex;flex-wrap:wrap;gap:0 22px;padding:12px 0;margin-bottom:18px;
+  border-top:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.dw-stats div{display:flex;flex-direction:column;gap:1px}
+.dw-stats dt{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--faint)}
+.dw-stats dd{margin:0;font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:500}
+.lbl{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);display:block;margin:0 0 7px}
+.dw-text{width:100%;min-height:104px;background:var(--card);color:var(--ink);border:1px solid var(--hair);
+  border-radius:7px;padding:11px 12px;font-size:13.5px;line-height:1.55;resize:vertical;margin-bottom:20px}
+.dw-text:focus{outline:none;border-color:var(--rule);box-shadow:0 0 0 3px color-mix(in srgb,var(--spark) 20%,transparent)}
+.dw-text::placeholder,.composer textarea::placeholder{color:var(--faint)}
+.cmt{padding:11px 0;border-bottom:1px solid var(--hair)}
+.cmt:first-of-type{border-top:1px solid var(--hair)}
+.cmt-h{display:flex;align-items:center;gap:7px;margin-bottom:4px;font-family:"JetBrains Mono",monospace;
+  font-size:10px;color:var(--faint)}
+.cmt-h i{width:5px;height:5px;border-radius:50%;background:var(--cold);flex:none}
+.cmt-h.agent i{background:var(--spark)}
+.cmt-h b{color:var(--muted);font-weight:500;letter-spacing:.1em;text-transform:uppercase}
+.cmt p{margin:0;font-size:13.5px;line-height:1.5;white-space:pre-wrap}
+.cmt-empty{font-size:13px;color:var(--faint);padding:10px 0 4px;line-height:1.45;margin:0}
+.composer{display:flex;gap:8px;margin-top:12px}
+.composer textarea{flex:1;min-height:38px;max-height:120px;background:var(--card);color:var(--ink);
+  border:1px solid var(--hair);border-radius:7px;padding:9px 11px;font-size:13.5px;resize:none}
+.composer textarea:focus{outline:none;border-color:var(--rule)}
+.dw-foot{flex:none;display:flex;gap:9px;align-items:center;padding:11px 14px;border-top:1px solid var(--hair)}
+.danger:hover{color:var(--spark-ink);background:var(--spark);border-color:var(--spark)}
+.saved{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--faint);
+  opacity:0;transition:opacity .2s}
+.saved.on{opacity:1}
+
+.sheet{position:fixed;inset:0;z-index:150;display:flex;align-items:center;justify-content:center;
+  padding:24px;opacity:0;pointer-events:none;transition:opacity .18s}
+.sheet.on{opacity:1;pointer-events:auto}
+.sheet-bg{position:absolute;inset:0;background:rgba(10,13,15,.5)}
+.sheet-in{position:relative;width:min(520px,100%);max-height:86vh;overflow-y:auto;background:var(--surface);
+  border:1px solid var(--rule);border-radius:11px;box-shadow:var(--drop);padding:22px 24px 24px}
+.sheet-in h2{font-family:"Martian Mono",monospace;font-size:17px;letter-spacing:-.045em;margin:0 0 16px}
+.field{display:block;margin-bottom:14px}
+.field span{display:block;font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+.field input,.field textarea{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--hair);
+  border-radius:7px;padding:9px 11px;font-size:13.5px;resize:vertical}
+.field input:focus,.field textarea:focus{outline:none;border-color:var(--spark)}
+.sheet-acts{display:flex;gap:9px;justify-content:flex-end;margin-top:18px}
+
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(14px);background:var(--ink);
+  color:var(--bg);border-radius:7px;padding:9px 15px;font-size:12.5px;box-shadow:var(--lift);
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:200;max-width:90vw}
+.toast.on{opacity:1;transform:translateX(-50%)}
+
+@media (max-width:860px){
+  .board{grid-template-columns:none !important;grid-auto-flow:column;grid-auto-columns:78vw;overflow-x:auto}
+  .stat,.bdesc{display:none}
+  .duel-stage{grid-template-columns:none;grid-template-rows:1fr 1px 1fr}
+  .drawer{width:100vw}
+}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms !important;animation-duration:.01ms !important}}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <span class="mark">pit</span>
+  <span class="boardsel"><select id="boardSel" aria-label="Board"></select></span>
+  <span class="bdesc" id="bdesc" title="Click to edit"></span>
+  <span class="bar-sp"></span>
+  <span class="state" id="stateEl"></span>
+  <span class="stat" id="statEl"></span>
+  <button class="ghost" id="newBoardBtn" type="button">New board</button>
+  <button class="ghost" id="undoBtn" type="button" title="Void the last duel">Undo duel</button>
+  <button class="ghost" id="themeBtn" type="button">dark</button>
+  <button class="duel-btn" id="duelBtn" type="button">Duel <kbd>D</kbd></button>
+</div>
+
+<main class="board" id="board"></main>
+
+<div class="duel" id="duel" aria-hidden="true">
+  <div class="duel-top">
+    <span class="mark">pit</span>
+    <span class="duel-scope" id="duelScope"></span>
+    <span class="bar-sp"></span>
+    <button class="ghost" id="closeDuel" type="button">Back to board · Esc</button>
+  </div>
+  <div class="duel-stage" id="stage"></div>
+  <div class="duel-foot" id="duelFoot"></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true"></aside>
+
+<div class="sheet" id="sheet" aria-hidden="true">
+  <div class="sheet-bg" data-close="1"></div>
+  <div class="sheet-in" id="sheetIn"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ------------------------------ api ------------------------------ */
+async function api(path, opts){
+  const r = await fetch(path, Object.assign({headers:{'content-type':'application/json'}}, opts||{}));
+  if(r.status === 401){ location.href = '/login'; throw new Error('unauthorized'); }
+  if(r.status === 204) return null;
+  const body = await r.json().catch(()=>null);
+  if(!r.ok) throw new Error((body && body.error) || ('HTTP '+r.status));
+  return body;
+}
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const trim = (s,n=32) => s.length>n ? s.slice(0,n-1)+'…' : s;
+
+/* ------------------------------ state ------------------------------ */
+let boards=[], B=null, ideas=[], verdict={settled:false,contested:0}, sel=null;
+let fresh=new Set(), moves={}, routing=false;
+
+const $ = id => document.getElementById(id);
+const board=$('board'), boardSel=$('boardSel'), stateEl=$('stateEl'), statEl=$('statEl'),
+      bdesc=$('bdesc'), duelEl=$('duel'), stage=$('stage'), dfoot=$('duelFoot'),
+      dscope=$('duelScope'), drawer=$('drawer'), scrim=$('scrim'), sheet=$('sheet'), sheetIn=$('sheetIn');
+
+const live = () => ideas.filter(i => i.bucket !== B.terminal);
+const inCol = k => ideas.filter(i => i.bucket === k);
+const byId = id => ideas.find(i => i.id === id);
+const inboxOf = b => b.intake || b.buckets[0];
+
+async function loadBoards(){
+  const r = await api('/api/boards');
+  boards = r.boards || [];
+  boardSel.innerHTML = boards.map(b=>`<option value="${esc(b.slug)}">${esc(b.name)}</option>`).join('');
+}
+async function loadBoard(slug){
+  const r = await api('/api/boards/'+encodeURIComponent(slug)+'/ideas');
+  B = r.board; ideas = r.ideas || [];
+  boardSel.value = B.slug;
+  const bv = boards.find(x=>x.slug===B.slug);
+  verdict = (bv && bv.verdict) || verdict;
+  await refreshVerdict();
+}
+async function refreshVerdict(){
+  const bv = await api('/api/boards/'+encodeURIComponent(B.slug));
+  verdict = bv.verdict;
+  Object.assign(B, {name:bv.name, description:bv.description, buckets:bv.buckets, terminal:bv.terminal});
+}
+async function reload(keepFresh){
+  const r = await api('/api/boards/'+encodeURIComponent(B.slug)+'/ideas');
+  ideas = r.ideas || [];
+  if(!keepFresh) fresh.clear();
+  await refreshVerdict();
+  paint(snapshot());
+}
+
+/* ------------------------------ contested ------------------------------ */
+/* Mirrors the server's rule: overlap with the K-th place interval. Used only
+   to mark cards, and suppressed when it would mark half the board — at that
+   point "unsettled" in the header already says it, and a stripe on everything
+   is decoration. */
+const K = 5;
+function contestedSet(){
+  const s = live().slice().sort((a,b)=>b.rating-a.rating);
+  if(s.length <= K) return new Set();
+  const kth = s[K-1], lo = kth.rating-kth.rd, hi = kth.rating+kth.rd;
+  const hits = s.filter(x => x.rating+x.rd > lo && x.rating-x.rd < hi);
+  if(hits.length > Math.max(2, Math.floor(s.length/2))) return new Set();
+  return new Set(hits.map(x=>x.id));
+}
+
+/* ------------------------------ render ------------------------------ */
+function cardHTML(x, con){
+  const mv = moves[x.id]|0;
+  return `<article class="card${fresh.has(x.id)?' fresh':''}${con?' contested':''}${sel===x.id?' sel':''}"
+    draggable="true" tabindex="0" data-id="${x.id}">
+    <span class="mv ${mv>0?'up':mv<0?'dn':''}">${mv>0?'▲'+mv:mv<0?'▼'+(-mv):''}</span>
+    <p class="t">${esc(x.title)}</p>
+    ${x.note?`<p class="n">${esc(x.note)}</p>`:''}
+    <div class="f">
+      <span class="src ${x.source==='agent'?'agent':''}" title="${x.source==='agent'?'from an agent':'yours'}"></span>
+      ${x.body?'<span>body</span>':''}
+      ${x.comments&&x.comments.length?`<span>${x.comments.length}</span>`:''}
+      ${x.pinned?'<span>placed</span>':''}
+      <span class="rt">${Math.round(x.rating)} <span class="rd">±${Math.round(x.rd)}</span></span>
+    </div></article>`;
+}
+function snapshot(){
+  const m={}; board.querySelectorAll('.card').forEach(c=>m[c.dataset.id]=c.getBoundingClientRect()); return m;
+}
+function paint(prev){
+  if(!B) return;
+  const scroll={}; board.querySelectorAll('.col-body').forEach(b=>scroll[b.dataset.k]=b.scrollTop);
+  const con = contestedSet();
+
+  board.style.gridTemplateColumns =
+    `repeat(${B.buckets.length-1},minmax(185px,1fr)) minmax(150px,.72fr)`;
+  board.innerHTML = B.buckets.map(k=>{
+    const g = inCol(k), term = k===B.terminal;
+    return `<section class="col${term?' is-terminal':''}" data-k="${esc(k)}">
+      <header class="col-head"><span class="col-name">${esc(k)}</span><span class="col-n">${g.length}</span>
+      ${term||g.length<2?'':`<button class="col-duel" type="button" data-scope="${esc(k)}">duel</button>`}</header>
+      <div class="col-body" data-k="${esc(k)}">
+        ${g.length ? g.map(x=>cardHTML(x,con.has(x.id))).join('')
+                   : `<div class="col-empty">${term?'Nothing buried yet.':'Drag an idea here, or add one below.'}</div>`}
+      </div>
+      ${term?'':`<div class="quick"><input data-bucket="${esc(k)}" placeholder="Add to ${esc(k)}…" autocomplete="off"></div>`}
+    </section>`;
+  }).join('');
+  board.querySelectorAll('.col-body').forEach(b=>b.scrollTop=scroll[b.dataset.k]||0);
+
+  if(prev){
+    board.querySelectorAll('.card').forEach(c=>{
+      const was=prev[c.dataset.id]; if(!was) return;
+      const now=c.getBoundingClientRect(), dx=was.left-now.left, dy=was.top-now.top;
+      if(!dx&&!dy) return;
+      c.style.transition='none'; c.style.transform=`translate(${dx}px,${dy}px)`;
+      requestAnimationFrame(()=>{ c.style.transition='transform .42s cubic-bezier(.2,.7,.3,1)'; c.style.transform=''; });
+    });
+  }
+
+  const n = live().length;
+  stateEl.className = 'state'+(verdict.settled?' settled':'');
+  stateEl.innerHTML = '<span class="dot"></span>'+(verdict.settled?'settled':'unsettled');
+  stateEl.title = verdict.settled
+    ? `More duels would not change the top ${K}.`
+    : `${verdict.contested} ideas still straddle the cut (agreement ${Math.round((verdict.stability||0)*100)}%).`;
+  statEl.textContent = `${n} live · ${ideas.length-n} buried`;
+  bdesc.textContent = B.description || 'add a description';
+  $('duelBtn').disabled = n < 2;
+  fresh.clear(); moves={};
+}
+
+/* ------------------------------ quick add ------------------------------ */
+board.addEventListener('keydown', async e=>{
+  const input = e.target.closest('.quick input');
+  if(input){
+    if(e.key !== 'Enter') return;
+    const title = input.value.trim(); if(!title) return;
+    input.value='';
+    try{
+      const r = await api(`/api/boards/${encodeURIComponent(B.slug)}/ideas`, {method:'POST',
+        body: JSON.stringify({ideas:[{title, bucket: input.dataset.bucket}]})});
+      (r.ideas||[]).forEach(i=>fresh.add(i.id));
+      await reload(true);
+      const again = board.querySelector(`.quick input[data-bucket="${CSS.escape(input.dataset.bucket)}"]`);
+      if(again) again.focus();
+    }catch(err){ toast(err.message); }
+    return;
+  }
+  const c = e.target.closest('.card');
+  if(c && (e.key==='ArrowLeft'||e.key==='ArrowRight')){
+    const i = B.buckets.indexOf(c.closest('.col').dataset.k);
+    const to = e.key==='ArrowRight' ? i+1 : i-1;
+    if(to<0||to>=B.buckets.length) return;
+    e.preventDefault();
+    await move(c.dataset.id, B.buckets[to]);
+    const again = board.querySelector(`.card[data-id="${c.dataset.id}"]`); if(again) again.focus();
+  }
+});
+
+async function move(id, bucket){
+  try{
+    await api('/api/ideas/'+id, {method:'PATCH', body: JSON.stringify({bucket})});
+    await reload();
+    toast(`“${trim(byId(id)?.title||'')}” → ${bucket}`);
+  }catch(e){ toast(e.message); }
+}
+
+/* ------------------------------ drag ------------------------------ */
+let dragId=null;
+board.addEventListener('dragstart', e=>{
+  const c=e.target.closest('.card'); if(!c) return;
+  dragId=c.dataset.id; c.classList.add('dragging');
+  e.dataTransfer.effectAllowed='move';
+  try{ e.dataTransfer.setData('text/plain', dragId); }catch(_){}
+});
+board.addEventListener('dragend', e=>{
+  const c=e.target.closest('.card'); if(c) c.classList.remove('dragging');
+  board.querySelectorAll('.col.over').forEach(n=>n.classList.remove('over'));
+  dragId=null;
+});
+board.addEventListener('dragover', e=>{
+  const col=e.target.closest('.col'); if(!col||!dragId) return;
+  e.preventDefault(); e.dataTransfer.dropEffect='move';
+  board.querySelectorAll('.col.over').forEach(n=>{ if(n!==col) n.classList.remove('over'); });
+  col.classList.add('over');
+});
+board.addEventListener('drop', async e=>{
+  const col=e.target.closest('.col'); if(!col||!dragId) return;
+  e.preventDefault();
+  const item=byId(dragId); if(!item) return;
+  const to=col.dataset.k, over=e.target.closest('.card');
+  const group=inCol(to).filter(x=>x.id!==item.id);
+
+  let idx=group.length;
+  if(over){
+    const at=group.findIndex(x=>x.id===over.dataset.id);
+    if(at>=0){ const r=over.getBoundingClientRect(); idx = e.clientY>r.top+r.height/2 ? at+1 : at; }
+  }
+  const above=group[idx-1], below=group[idx];
+  const rating = above&&below ? (above.rating+below.rating)/2
+               : above ? above.rating-16 : below ? below.rating+16 : item.rating;
+  const changed = item.bucket!==to;
+  try{
+    /* One call: a drag is a bucket move and a hand-placed rating at once. */
+    await api('/api/ideas/'+item.id+'/place', {method:'POST',
+      body: JSON.stringify({rating, bucket: to})});
+    await reload();
+    if(sel===item.id) openDrawer(item.id);
+    toast(changed ? `“${trim(item.title)}” → ${to}` : 'placed by hand — holds until a duel disagrees');
+  }catch(err){ toast(err.message); }
+});
+
+/* ------------------------------ drawer ------------------------------ */
+async function openDrawer(id){
+  let x;
+  try{ x = await api('/api/ideas/'+id); }catch(e){ return toast(e.message); }
+  sel = id;
+  const pool = live().slice().sort((a,b)=>b.rating-a.rating);
+  const rank = pool.findIndex(i=>i.id===id)+1;
+  const cmts = x.comments||[];
+
+  drawer.innerHTML = `
+  <div class="dw-top">
+    <select class="bkchip" id="dwBucket">${B.buckets.map(k=>`<option${k===x.bucket?' selected':''}>${esc(k)}</option>`).join('')}</select>
+    <span class="srcchip ${x.source==='agent'?'agent':''}"><i></i>${x.source==='agent'?'from an agent':'yours'}</span>
+    <button class="dw-x" id="dwX" type="button" aria-label="Close">×</button>
+  </div>
+  <div class="dw-body">
+    <textarea class="dw-title" id="dwTitle" rows="1">${esc(x.title)}</textarea>
+    <textarea class="dw-note" id="dwNote" rows="1" placeholder="one line — what it is">${esc(x.note)}</textarea>
+    <div class="dw-stats">
+      <div><dt>rating</dt><dd>${Math.round(x.rating)} <span style="color:var(--faint)">±${Math.round(x.rd)}</span></dd></div>
+      <div><dt>rank</dt><dd>${rank>0?rank+' / '+pool.length:'buried'}</dd></div>
+      <div><dt>record</dt><dd>${x.wins}–${x.losses}</dd></div>
+      <div><dt>duels</dt><dd>${x.wins+x.losses}</dd></div>
+    </div>
+    <label class="lbl" for="dwBody">Body</label>
+    <textarea class="dw-text" id="dwBody" placeholder="What is the actual idea? Agents write here too.">${esc(x.body)}</textarea>
+    <label class="lbl">Notes${cmts.length?' · '+cmts.length:''}</label>
+    ${cmts.length ? cmts.map(c=>`<div class="cmt"><div class="cmt-h ${c.who==='agent'?'agent':''}"><i></i><b>${c.who==='agent'?'agent':'you'}</b></div><p>${esc(c.text)}</p></div>`).join('')
+      : '<p class="cmt-empty">Nothing here yet. Worth a line if there is something you would forget before you look at this again.</p>'}
+    <div class="composer">
+      <textarea id="dwCmt" rows="1" placeholder="Add a note"></textarea>
+      <button class="ghost" id="dwSend" type="button">Post</button>
+    </div>
+  </div>
+  <div class="dw-foot">
+    <button class="ghost danger" id="dwBury" type="button">${x.bucket===B.terminal?'Dig up':'Bury'}</button>
+    <button class="ghost" id="dwDel" type="button">Delete</button>
+    <span class="saved" id="dwSaved">saved</span>
+  </div>`;
+
+  drawer.classList.add('on'); drawer.setAttribute('aria-hidden','false'); scrim.classList.add('on');
+
+  const grow = el => { el.style.height='auto'; el.style.height=el.scrollHeight+'px'; };
+  const T=$('dwTitle'), N=$('dwNote'), BD=$('dwBody');
+  grow(T); grow(N);
+
+  let saveT=null, flashT=null;
+  const flash = () => { const s=$('dwSaved'); if(!s) return; s.classList.add('on');
+    clearTimeout(flashT); flashT=setTimeout(()=>s.classList.remove('on'),1200); };
+  const save = patch => {
+    clearTimeout(saveT);
+    saveT = setTimeout(async ()=>{
+      try{ await api('/api/ideas/'+id,{method:'PATCH',body:JSON.stringify(patch)}); flash();
+           const r=await api(`/api/boards/${encodeURIComponent(B.slug)}/ideas`); ideas=r.ideas||[]; paint(snapshot());
+      }catch(e){ toast(e.message); }
+    }, 500);
+  };
+  T.addEventListener('input', ()=>{ grow(T); save({title:T.value.replace(/\n/g,' ')}); });
+  N.addEventListener('input', ()=>{ grow(N); save({note:N.value.replace(/\n/g,' ')}); });
+  BD.addEventListener('input', ()=> save({body:BD.value}));
+
+  $('dwBucket').addEventListener('change', async e=>{ await move(id, e.target.value); openDrawer(id); });
+  $('dwX').addEventListener('click', closeDrawer);
+  $('dwBury').addEventListener('click', async ()=>{
+    const buried = x.bucket===B.terminal;
+    await move(id, buried ? inboxOf(B) : B.terminal);
+    openDrawer(id);
+    toast(buried ? 'dug up' : 'buried — it keeps its row so you stop re-having it');
+  });
+  $('dwDel').addEventListener('click', async ()=>{
+    try{ await api('/api/ideas/'+id,{method:'DELETE'}); closeDrawer(); await reload(); toast('deleted'); }
+    catch(e){ toast(e.message); }
+  });
+  const send = async ()=>{
+    const box=$('dwCmt'), v=box.value.trim(); if(!v) return;
+    try{ await api('/api/ideas/'+id+'/comments',{method:'POST',body:JSON.stringify({text:v})});
+         box.value=''; openDrawer(id); await reload(); }
+    catch(e){ toast(e.message); }
+  };
+  $('dwSend').addEventListener('click', send);
+  $('dwCmt').addEventListener('keydown', e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); send(); }});
+  writeHash();
+}
+function closeDrawer(){
+  drawer.classList.remove('on'); drawer.setAttribute('aria-hidden','true');
+  scrim.classList.remove('on'); sel=null; paint(snapshot()); writeHash();
+}
+scrim.addEventListener('click', closeDrawer);
+board.addEventListener('click', e=>{
+  const d=e.target.closest('.col-duel'); if(d) return openDuel(d.dataset.scope);
+  const c=e.target.closest('.card'); if(c) openDrawer(c.dataset.id);
+});
+
+/* ------------------------------ duel ------------------------------ */
+let pair=null, locked=false, scope=null, sessionN=0, startCon=1, keepGoing=false, ranksBefore={};
+
+function rankMap(){
+  const m={};
+  B.buckets.forEach(k=>inCol(k).forEach((x,i)=>m[x.id]=i+1));
+  return m;
+}
+function sideHTML(x,i){
+  return `<button class="side" data-i="${i}">
+    <span class="src">${x.source==='agent'?'an agent suggested':'you wrote'}</span>
+    <p class="ttl">${esc(x.title)}</p>
+    ${x.note?`<p class="note">${esc(x.note)}</p>`:''}
+    ${x.body?`<p class="body">${esc(trim(x.body,200))}</p>`:''}
+    <span class="from">${esc(x.bucket)} · ${x.wins}–${x.losses} · ±${Math.round(x.rd)}</span></button>`;
+}
+function drawFoot(){
+  const left = verdict.contested||0;
+  const prog = verdict.settled ? 100 : Math.min(96, Math.max(0,(startCon-left)/startCon*100));
+  dfoot.innerHTML =
+    `<span>${sessionN} this session</span>
+     <span class="meter"><i class="${verdict.settled?'done':''}" style="width:${prog}%"></i></span>
+     ${verdict.settled?'<span class="pill">settled</span>':`<span>${left} still contest the top ${K}</span>`}
+     <span>← → pick · space skip · esc out</span>`;
+}
+async function nextPair(){
+  if(!keepGoing && verdict.settled && sessionN>0) return drawDone();
+  let r;
+  try{ r = await api(`/api/boards/${encodeURIComponent(B.slug)}/pair`+(scope?`?bucket=${encodeURIComponent(scope)}`:'')); }
+  catch(e){ return toast(e.message); }
+  if(r.exhausted || !r.a || !r.b) return drawDone();
+  verdict = r.verdict || verdict;
+  pair=[r.a,r.b];
+  stage.innerHTML = sideHTML(r.a,0)+'<div class="seam"></div>'+sideHTML(r.b,1);
+  locked=false; drawFoot();
+}
+function drawDone(){
+  const top = live().slice().sort((a,b)=>b.rating-a.rating).slice(0,K);
+  stage.innerHTML = `<div class="duel-done">
+    <h2>${verdict.settled?'Settled.':'Out of useful pairs.'}</h2>
+    <p>${verdict.settled
+      ? `${sessionN} duels. More would not change these five. Everything below them is still rough — and that is fine, you were never choosing #9.`
+      : `Every pair that would tell us something has been asked. This top ${K} is the best the evidence supports.`}</p>
+    <ol>${top.map(x=>`<li>${esc(x.title)}<span>${Math.round(x.rating)} ±${Math.round(x.rd)}</span></li>`).join('')}</ol>
+    <div class="done-acts">
+      <button class="ghost" id="doneBack" type="button">Back to board</button>
+      <button class="ghost" id="doneMore" type="button">Keep dueling anyway</button>
+    </div></div>`;
+  $('doneBack').addEventListener('click', closeDuel);
+  $('doneMore').addEventListener('click', ()=>{ keepGoing=true; nextPair(); });
+  drawFoot();
+}
+async function pick(i){
+  if(locked||!pair) return;
+  const sides = stage.querySelectorAll('.side'); if(sides.length<2) return;
+  locked=true;
+  sides[i].classList.add('won'); sides[1-i].classList.add('lost');
+  try{
+    const r = await api(`/api/boards/${encodeURIComponent(B.slug)}/duels`, {method:'POST',
+      body: JSON.stringify({winner: pair[i].id, loser: pair[1-i].id})});
+    verdict = r.verdict || verdict;
+    sessionN++;
+    const res = await api(`/api/boards/${encodeURIComponent(B.slug)}/ideas`);
+    ideas = res.ideas||[];
+    const after = rankMap();
+    moves = {}; Object.keys(ranksBefore).forEach(id=>{ const d=(ranksBefore[id]||0)-(after[id]||0); if(d) moves[id]=d; });
+  }catch(e){ toast(e.message); locked=false; return; }
+  setTimeout(nextPair, 300);
+}
+async function openDuel(s){
+  if(live().length<2) return toast('needs at least two live ideas');
+  scope=s||null; sessionN=0; keepGoing=false;
+  await refreshVerdict();
+  startCon = Math.max(1, verdict.contested||1);
+  ranksBefore = rankMap();
+  dscope.textContent = scope ? 'inside '+scope : B.name;
+  duelEl.classList.add('on'); duelEl.setAttribute('aria-hidden','false');
+  await nextPair(); writeHash();
+}
+async function closeDuel(){
+  duelEl.classList.remove('on'); duelEl.setAttribute('aria-hidden','true');
+  await reload(); writeHash();
+  const n = Object.keys(moves).length;
+  if(sessionN) toast(`${sessionN} duels · ${n} card${n===1?'':'s'} moved`);
+  $('duelBtn').focus();
+}
+stage.addEventListener('click', e=>{ const s=e.target.closest('.side'); if(s) pick(+s.dataset.i); });
+$('duelBtn').addEventListener('click', ()=>openDuel(null));
+$('closeDuel').addEventListener('click', closeDuel);
+
+$('undoBtn').addEventListener('click', async ()=>{
+  try{ await api(`/api/boards/${encodeURIComponent(B.slug)}/duels/undo`,{method:'POST'});
+       await reload(); toast('last duel voided and ratings recomputed'); }
+  catch(e){ toast(e.message==='not found' ? 'no duels to undo' : e.message); }
+});
+
+/* ------------------------------ sheets ------------------------------ */
+function openSheet(html, onOpen){
+  sheetIn.innerHTML = html;
+  sheet.classList.add('on'); sheet.setAttribute('aria-hidden','false');
+  if(onOpen) onOpen();
+}
+function closeSheet(){ sheet.classList.remove('on'); sheet.setAttribute('aria-hidden','true'); }
+sheet.addEventListener('click', e=>{ if(e.target.dataset.close) closeSheet(); });
+
+$('newBoardBtn').addEventListener('click', ()=>{
+  openSheet(`<h2>New board</h2>
+    <label class="field"><span>Name</span><input id="nbName" placeholder="Side projects" autofocus></label>
+    <label class="field"><span>Description</span><textarea id="nbDesc" rows="2" placeholder="What is this board for?"></textarea></label>
+    <label class="field"><span>Buckets — comma separated, decided first</span>
+      <input id="nbBuckets" value="shortlist, maybe, inbox, parked, dead"></label>
+    <div class="sheet-acts"><button class="ghost" data-close="1" type="button">Cancel</button>
+      <button class="duel-btn" id="nbGo" type="button">Create</button></div>`, ()=>{
+    $('nbName').focus();
+    $('nbGo').addEventListener('click', async ()=>{
+      const name=$('nbName').value.trim(); if(!name) return toast('a board needs a name');
+      const buckets=$('nbBuckets').value.split(',').map(s=>s.trim()).filter(Boolean);
+      try{
+        const b = await api('/api/boards',{method:'POST',body:JSON.stringify({
+          name, description:$('nbDesc').value.trim(), buckets,
+          terminal: buckets[buckets.length-1] })});
+        closeSheet(); await loadBoards(); await loadBoard(b.slug); paint(null); writeHash();
+        toast('board created');
+      }catch(e){ toast(e.message); }
+    });
+  });
+});
+
+bdesc.addEventListener('click', ()=>{
+  openSheet(`<h2>${esc(B.name)}</h2>
+    <label class="field"><span>Description</span><textarea id="bdText" rows="3"
+      placeholder="What is this board for?">${esc(B.description)}</textarea></label>
+    <div class="sheet-acts"><button class="ghost" data-close="1" type="button">Cancel</button>
+      <button class="duel-btn" id="bdGo" type="button">Save</button></div>`, ()=>{
+    $('bdText').focus();
+    $('bdGo').addEventListener('click', async ()=>{
+      try{ await api('/api/boards/'+encodeURIComponent(B.slug),{method:'PATCH',
+             body:JSON.stringify({description:$('bdText').value.trim()})});
+           closeSheet(); await loadBoards(); await reload(); toast('description saved'); }
+      catch(e){ toast(e.message); }
+    });
+  });
+});
+
+/* ------------------------------ routing ------------------------------
+   Every view has an address so a board, a card or a duel is a link worth
+   keeping: #/<board>, #/<board>/<ideaId>, #/<board>/duel[/<bucket>]  */
+function writeHash(){
+  if(routing || !B) return;
+  let h = '#/'+B.slug;
+  if(duelEl.classList.contains('on')) h += '/duel'+(scope?'/'+scope:'');
+  else if(sel) h += '/'+sel;
+  if(location.hash !== h){ routing=true; history.pushState(null,'',h); routing=false; }
+}
+async function readHash(){
+  const parts = (location.hash||'').replace(/^#\/?/,'').split('/').filter(Boolean);
+  const slug = parts[0] && boards.some(b=>b.slug===parts[0]) ? parts[0] : (boards[0]&&boards[0].slug);
+  if(!slug){ board.innerHTML = '<div style="padding:40px;color:var(--muted)">No boards yet. Create one to start.</div>'; return; }
+  if(!B || B.slug!==slug) await loadBoard(slug);
+  paint(null);
+
+  if(parts[1]==='duel'){ if(!duelEl.classList.contains('on')) await openDuel(parts[2]||null); return; }
+  if(duelEl.classList.contains('on')){
+    duelEl.classList.remove('on'); duelEl.setAttribute('aria-hidden','true');
+  }
+  if(parts[1] && byId(parts[1])){ if(sel!==parts[1]) await openDrawer(parts[1]); }
+  else if(sel){ closeDrawer(); }
+}
+window.addEventListener('hashchange', ()=>{ if(routing) return; routing=true; readHash().finally(()=>routing=false); });
+boardSel.addEventListener('change', async ()=>{
+  sel=null; drawer.classList.remove('on'); scrim.classList.remove('on');
+  await loadBoard(boardSel.value); paint(null); writeHash();
+});
+
+/* ------------------------------ keys, theme, toast ------------------------------ */
+document.addEventListener('keydown', e=>{
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if(sheet.classList.contains('on')){ if(e.key==='Escape'){e.preventDefault();closeSheet();} return; }
+  if(duelEl.classList.contains('on')){
+    if(e.key==='Escape'){ e.preventDefault(); closeDuel(); }
+    else if(e.key==='ArrowLeft'){ e.preventDefault(); pick(0); }
+    else if(e.key==='ArrowRight'){ e.preventDefault(); pick(1); }
+    else if(e.key===' '){ e.preventDefault(); if(!locked) nextPair(); }
+    return;
+  }
+  if(drawer.classList.contains('on')){ if(e.key==='Escape'){ e.preventDefault(); document.activeElement.blur(); closeDrawer(); } return; }
+  if((e.key==='d'||e.key==='D') && !typing){ e.preventDefault(); openDuel(null); }
+});
+
+let tt=null;
+function toast(m){
+  const el=$('toast'); el.textContent=m; el.classList.add('on');
+  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('on'),2800);
+}
+const tb=$('themeBtn');
+const sysDark = ()=>matchMedia('(prefers-color-scheme:dark)').matches;
+const cur = ()=>document.documentElement.dataset.theme || (sysDark()?'dark':'light');
+tb.addEventListener('click', ()=>{
+  document.documentElement.dataset.theme = cur()==='dark'?'light':'dark';
+  tb.textContent = cur()==='dark'?'light':'dark';
+  try{ localStorage.setItem('pit-theme', cur()); }catch(_){}
+});
+try{ const saved=localStorage.getItem('pit-theme'); if(saved) document.documentElement.dataset.theme=saved; }catch(_){}
+tb.textContent = cur()==='dark'?'light':'dark';
+
+/* ------------------------------ boot ------------------------------ */
+(async function(){
+  try{ await loadBoards(); await readHash(); }
+  catch(e){ toast(e.message); }
+})();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+[Unit]
+Description=pit idea ranker
+Documentation=https://pit.example.com file://%h/pit/pit
+After=network.target
+
+[Service]
+ExecStart=%h/pit/pit --addr 127.0.0.1:8802 --db %h/pit/pit.db --seed
+Environment=PIT_API_KEY=CHANGE_ME
+
+# --- hosted connectors (Claude.ai / ChatGPT "Connect") -----------------------
+# Leave the issuer/resource pair unset and /mcp stays API-key-only.
+# The resource IS the OAuth audience and must be this endpoint's public URL.
+Environment=PIT_OAUTH_ISSUER=https://your-app.authkit.app
+Environment=PIT_MCP_RESOURCE=https://pit.example.com/mcp
+# Single-user gate. Fail closed: with this set, only these identities pass even
+# if the AuthKit app would issue a token to anyone who signs up. After the first
+# real connect, read the actual identity out of the journal
+#   journalctl --user -u pit | grep 'first verified-token identity'
+# and pin whichever claim it carries (sub or email).
+Environment=PIT_OAUTH_ALLOWED_EMAIL=CHANGE_ME
+Environment=PIT_OAUTH_ALLOWED_SUB=
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
