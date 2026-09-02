@@ -50,12 +50,46 @@ button,input,textarea,select{font:inherit;color:inherit}
 .mark{font-family:"Martian Mono",monospace;font-weight:700;font-size:16px;letter-spacing:-.07em;flex:none}
 .mark::after{content:"";display:inline-block;width:6px;height:6px;background:var(--spark);margin-left:6px;vertical-align:2px}
 .boardsel{position:relative;padding-left:11px;border-left:1px solid var(--rule)}
-.boardsel select{appearance:none;background:none;border:1px solid transparent;border-radius:6px;
-  padding:5px 25px 5px 8px;font-size:13.5px;font-weight:500;cursor:pointer;max-width:210px}
-.boardsel select:hover{border-color:var(--rule)}
-.boardsel::after{content:"";position:absolute;right:8px;top:50%;width:5px;height:5px;
-  border-right:1.5px solid var(--faint);border-bottom:1.5px solid var(--faint);
-  transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.boardbtn{display:flex;align-items:center;gap:8px;background:none;border:1px solid transparent;
+  border-radius:6px;padding:5px 9px;font-size:13.5px;font-weight:500;cursor:pointer;max-width:230px}
+.boardbtn:hover{border-color:var(--rule)}
+.boardbtn[aria-expanded="true"]{border-color:var(--rule);background:var(--sunk)}
+.boardbtn:focus-visible{outline:2px solid var(--spark);outline-offset:1px}
+.boardbtn b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.boardbtn .chev{width:5px;height:5px;flex:none;border-right:1.5px solid var(--faint);
+  border-bottom:1.5px solid var(--faint);transform:translateY(-2px) rotate(45deg)}
+
+/* The picker is also the only across-boards view there is, so each row carries
+   what you would open a board to find out: what it is for, how much is live,
+   and whether its ranking can still change. */
+.pop{position:absolute;top:calc(100% + 7px);left:8px;z-index:160;width:min(380px,92vw);
+  background:var(--surface);border:1px solid var(--rule);border-radius:9px;box-shadow:var(--drop);
+  overflow:hidden;display:flex;flex-direction:column}
+.pop[hidden]{display:none}
+.pop input{border:0;border-bottom:1px solid var(--hair);background:none;color:var(--ink);
+  padding:11px 13px;font-size:13.5px;width:100%}
+.pop input:focus{outline:none}
+.pop input::placeholder{color:var(--faint)}
+.pop-list{max-height:min(48vh,380px);overflow-y:auto;padding:5px}
+.pop-row{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;background:none;
+  border:0;border-radius:6px;padding:8px 9px;cursor:pointer}
+.pop-row:hover,.pop-row.at{background:var(--sunk)}
+.pop-row .dot{width:7px;height:7px;border-radius:50%;background:var(--cold);flex:none;margin-top:5px}
+.pop-row.ok .dot{background:var(--spark)}
+.pop-row .mid{min-width:0;flex:1}
+.pop-row .nm{font-size:13.5px;font-weight:500;display:flex;align-items:center;gap:7px}
+.pop-row .nm em{font-style:normal;font-family:"JetBrains Mono",monospace;font-size:9.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.pop-row .ds{font-size:12px;color:var(--muted);line-height:1.35;margin-top:1px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pop-row .ct{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--faint);
+  flex:none;margin-top:2px;text-align:right}
+.pop-empty{padding:14px 12px;font-size:12.5px;color:var(--faint);text-align:center}
+.pop-foot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--hair);padding:7px 9px}
+.pop-new{flex:1;text-align:left;background:none;border:0;border-radius:6px;padding:7px 9px;
+  font-size:13px;color:var(--muted);cursor:pointer}
+.pop-new:hover{background:var(--sunk);color:var(--ink)}
+.pop-hint{font-family:"JetBrains Mono",monospace;font-size:9.5px;color:var(--faint);padding-right:6px}
 .bdesc{font-size:12.5px;color:var(--faint);max-width:30ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
 .bdesc:hover{color:var(--muted)}
 .bar-sp{flex:1}
@@ -259,7 +293,17 @@ button,input,textarea,select{font:inherit;color:inherit}
 
 <div class="bar">
   <span class="mark">pit</span>
-  <span class="boardsel"><select id="boardSel" aria-label="Board"></select></span>
+  <span class="boardsel">
+    <button class="boardbtn" id="boardBtn" type="button" aria-haspopup="listbox" aria-expanded="false">
+      <b id="boardBtnName">…</b><i class="chev"></i>
+    </button>
+    <div class="pop" id="boardPop" hidden>
+      <input id="popQ" placeholder="Filter boards…" autocomplete="off" aria-label="Filter boards">
+      <div class="pop-list" id="popList" role="listbox"></div>
+      <div class="pop-foot"><button class="pop-new" id="popNew" type="button">New board…</button>
+        <span class="pop-hint">B</span></div>
+    </div>
+  </span>
   <span class="bdesc" id="bdesc" title="Click to edit"></span>
   <span class="bar-sp"></span>
   <span class="state" id="stateEl"></span>
@@ -314,7 +358,8 @@ let boards=[], B=null, ideas=[], verdict={settled:false,contested:0}, sel=null;
 let fresh=new Set(), moves={}, routing=false;
 
 const $ = id => document.getElementById(id);
-const board=$('board'), boardSel=$('boardSel'), stateEl=$('stateEl'), statEl=$('statEl'),
+const board=$('board'), stateEl=$('stateEl'), statEl=$('statEl'),
+      boardBtn=$('boardBtn'), boardPop=$('boardPop'), popQ=$('popQ'), popList=$('popList'),
       bdesc=$('bdesc'), duelEl=$('duel'), stage=$('stage'), dfoot=$('duelFoot'),
       dscope=$('duelScope'), drawer=$('drawer'), scrim=$('scrim'), sheet=$('sheet'), sheetIn=$('sheetIn');
 
@@ -326,12 +371,11 @@ const inboxOf = b => b.intake || b.buckets[0];
 async function loadBoards(){
   const r = await api('/api/boards');
   boards = r.boards || [];
-  boardSel.innerHTML = boards.map(b=>`<option value="${esc(b.slug)}">${esc(b.name)}</option>`).join('');
 }
 async function loadBoard(slug){
   const r = await api('/api/boards/'+encodeURIComponent(slug)+'/ideas');
   B = r.board; ideas = r.ideas || [];
-  boardSel.value = B.slug;
+  $('boardBtnName').textContent = B.name;
   const bv = boards.find(x=>x.slug===B.slug);
   verdict = (bv && bv.verdict) || verdict;
   await refreshVerdict();
@@ -705,7 +749,7 @@ function openSheet(html, onOpen){
 function closeSheet(){ sheet.classList.remove('on'); sheet.setAttribute('aria-hidden','true'); }
 sheet.addEventListener('click', e=>{ if(e.target.dataset.close) closeSheet(); });
 
-$('newBoardBtn').addEventListener('click', ()=>{
+function newBoard(){
   openSheet(`<h2>New board</h2>
     <label class="field"><span>Name</span><input id="nbName" placeholder="Side projects" autofocus></label>
     <label class="field"><span>Description</span><textarea id="nbDesc" rows="2" placeholder="What is this board for?"></textarea></label>
@@ -726,7 +770,8 @@ $('newBoardBtn').addEventListener('click', ()=>{
       }catch(e){ toast(e.message); }
     });
   });
-});
+}
+$('newBoardBtn').addEventListener('click', newBoard);
 
 bdesc.addEventListener('click', ()=>{
   openSheet(`<h2>${esc(B.name)}</h2>
@@ -769,15 +814,74 @@ async function readHash(){
   else if(sel){ closeDrawer(); }
 }
 window.addEventListener('hashchange', ()=>{ if(routing) return; routing=true; readHash().finally(()=>routing=false); });
-boardSel.addEventListener('change', async ()=>{
+/* ------------------------------ board picker ------------------------------ */
+let popAt = 0, popRows = [];
+
+function renderPop(){
+  const q = popQ.value.trim().toLowerCase();
+  popRows = boards.filter(b =>
+    !q || b.name.toLowerCase().includes(q) || (b.description||'').toLowerCase().includes(q));
+  if(popAt >= popRows.length) popAt = Math.max(0, popRows.length-1);
+
+  popList.innerHTML = popRows.length ? popRows.map((b,i)=>{
+    const v = b.verdict||{}, here = B && b.slug===B.slug;
+    return `<button class="pop-row${v.settled?' ok':''}${i===popAt?' at':''}" role="option"
+      aria-selected="${here}" data-slug="${esc(b.slug)}" title="${v.settled
+        ?'Settled — more duels would not change the top 5'
+        :(v.contested||0)+' ideas still straddle the cut'}">
+      <span class="dot"></span>
+      <span class="mid">
+        <span class="nm">${esc(b.name)}${here?'<em>here</em>':''}</span>
+        ${b.description?`<span class="ds">${esc(b.description)}</span>`:''}
+      </span>
+      <span class="ct">${b.live}${b.ideas>b.live?` <span style="opacity:.55">+${b.ideas-b.live}</span>`:''}</span>
+    </button>`;
+  }).join('') : `<div class="pop-empty">No board matches “${esc(popQ.value)}”.</div>`;
+
+  const at = popList.querySelector('.pop-row.at');
+  if(at) at.scrollIntoView({block:'nearest'});
+}
+async function openPop(){
+  boardPop.hidden = false; boardBtn.setAttribute('aria-expanded','true');
+  popQ.value=''; popAt = Math.max(0, boards.findIndex(b=>B&&b.slug===B.slug));
+  renderPop(); popQ.focus();
+  /* Counts and verdicts go stale while you work, and this list is where you
+     decide which board needs you — so refresh behind the open panel. */
+  try{ await loadBoards(); if(!boardPop.hidden) renderPop(); }catch(_){}
+}
+function closePop(){
+  boardPop.hidden = true; boardBtn.setAttribute('aria-expanded','false');
+}
+async function choose(slug){
+  closePop();
+  if(B && slug===B.slug) return;
   sel=null; drawer.classList.remove('on'); scrim.classList.remove('on');
-  await loadBoard(boardSel.value); paint(null); writeHash();
+  try{ await loadBoard(slug); paint(null); writeHash(); }
+  catch(e){ toast(e.message); }
+}
+boardBtn.addEventListener('click', ()=> boardPop.hidden ? openPop() : closePop());
+popList.addEventListener('click', e=>{
+  const r = e.target.closest('.pop-row'); if(r) choose(r.dataset.slug);
+});
+popQ.addEventListener('input', ()=>{ popAt=0; renderPop(); });
+popQ.addEventListener('keydown', e=>{
+  if(e.key==='ArrowDown'){ e.preventDefault(); popAt=Math.min(popAt+1,popRows.length-1); renderPop(); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); popAt=Math.max(popAt-1,0); renderPop(); }
+  else if(e.key==='Enter'){ e.preventDefault(); if(popRows[popAt]) choose(popRows[popAt].slug); }
+  else if(e.key==='Escape'){ e.preventDefault(); closePop(); boardBtn.focus(); }
+});
+$('popNew').addEventListener('click', ()=>{ closePop(); newBoard(); });
+document.addEventListener('click', e=>{
+  if(!boardPop.hidden && !e.target.closest('.boardsel')) closePop();
 });
 
 /* ------------------------------ keys, theme, toast ------------------------------ */
 document.addEventListener('keydown', e=>{
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
   if(sheet.classList.contains('on')){ if(e.key==='Escape'){e.preventDefault();closeSheet();} return; }
+  if(!boardPop.hidden){ if(e.key==='Escape'){ e.preventDefault(); closePop(); boardBtn.focus(); } return; }
+  if((e.key==='b'||e.key==='B') && !typing && !duelEl.classList.contains('on')
+     && !drawer.classList.contains('on')){ e.preventDefault(); openPop(); return; }
   if(duelEl.classList.contains('on')){
     if(e.key==='Escape'){ e.preventDefault(); closeDuel(); }
     else if(e.key==='ArrowLeft'){ e.preventDefault(); pick(0); }
