@@ -12,13 +12,19 @@ Environment=PIT_API_KEY=CHANGE_ME
 # The resource IS the OAuth audience and must be this endpoint's public URL.
 Environment=PIT_OAUTH_ISSUER=https://your-app.authkit.app
 Environment=PIT_MCP_RESOURCE=https://pit.example.com/mcp
-# Single-user gate. Fail closed: with this set, only these identities pass even
-# if the AuthKit app would issue a token to anyone who signs up. After the first
-# real connect, read the actual identity out of the journal
+# Single-user gate, fail-closed: only these identities pass, even though the
+# AuthKit app would otherwise issue a token to anyone who can sign up.
+#
+# ⚠️ This AuthKit app issues sub="1" and NO email claim — sign-in is delegated to
+# an external identity provider, and the sub is that provider's user id, not a WorkOS
+# one. So the gate has to be the sub, and PIT_OAUTH_ALLOWED_EMAIL is useless
+# here. another app on the same tenant carries ALLOWED_SUB=1 for the same reason; it
+# looks like a placeholder and is not.
+#
+# For a different authorization server, connect once and read the real identity:
 #   journalctl --user -u pit | grep 'first verified-token identity'
-# and pin whichever claim it carries (sub or email).
-Environment=PIT_OAUTH_ALLOWED_EMAIL=CHANGE_ME
-Environment=PIT_OAUTH_ALLOWED_SUB=
+Environment=PIT_OAUTH_ALLOWED_EMAIL=
+Environment=PIT_OAUTH_ALLOWED_SUB=1
 
 Restart=on-failure
 RestartSec=5
