@@ -9,35 +9,48 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Martian+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
+/* Palette follows the terminal pairing from `theme`: Catppuccin Frappé for
+   dark, Rosé Pine Dawn for light. The spark stays the one accent — Dawn's gold
+   and Frappé's yellow are close enough that the identity survives the switch.
+
+   Every value is defined on bare :root so "system" needs no attribute at all;
+   the media block and the [data-theme] block only *re*define. */
 :root{
-  --bg:#E7E9E6; --surface:#F8F9F7; --sunk:#DCDFDB; --card:#FFFFFF;
-  --ink:#14171A; --muted:#6A7276; --faint:#9AA1A4;
-  --rule:#C6CBC6; --hair:#D5D9D4;
-  --spark:#E0A800; --spark-ink:#231A00;
-  --cold:#54646F; --dead:#A2A8A3;
-  --shadow:0 1px 2px rgba(20,23,26,.07),0 3px 8px rgba(20,23,26,.05);
-  --lift:0 8px 24px rgba(20,23,26,.16);
-  --drop:0 16px 48px rgba(20,23,26,.2);
-  color-scheme:light dark;
+  --bg:#faf4ed; --surface:#fffaf3; --sunk:#f4ede8; --card:#fffaf3;
+  --ink:#575279; --muted:#797593; --faint:#9893a5;
+  --rule:#cecacd; --hair:#dfdad9;
+  --spark:#ea9d34; --spark-ink:#2a1f08;
+  --cold:#286983; --dead:#9893a5;
+  --shadow:0 1px 2px rgba(87,82,121,.07),0 3px 8px rgba(87,82,121,.06);
+  --lift:0 8px 24px rgba(87,82,121,.14);
+  --drop:0 16px 48px rgba(87,82,121,.20);
+  color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#0D1012; --surface:#14181A; --sunk:#0A0D0F; --card:#1B2023;
-    --ink:#E9EBE8; --muted:#8B9397; --faint:#5E686C;
-    --rule:#2A3134; --hair:#212729;
-    --spark:#F2C318; --spark-ink:#1A1400;
-    --cold:#7F909C; --dead:#4C5457;
-    --shadow:0 1px 2px rgba(0,0,0,.4); --lift:0 10px 28px rgba(0,0,0,.55); --drop:0 18px 56px rgba(0,0,0,.7);
+    --bg:#292c3c; --surface:#303446; --sunk:#232634; --card:#414559;
+    --ink:#c6d0f5; --muted:#a5adce; --faint:#838ba7;
+    --rule:#51576d; --hair:#414559;
+    --spark:#e5c890; --spark-ink:#232634;
+    --cold:#8caaee; --dead:#737994;
+    --shadow:0 1px 2px rgba(0,0,0,.35);
+    --lift:0 10px 28px rgba(0,0,0,.45);
+    --drop:0 18px 56px rgba(0,0,0,.6);
+    color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0D1012; --surface:#14181A; --sunk:#0A0D0F; --card:#1B2023;
-  --ink:#E9EBE8; --muted:#8B9397; --faint:#5E686C;
-  --rule:#2A3134; --hair:#212729;
-  --spark:#F2C318; --spark-ink:#1A1400;
-  --cold:#7F909C; --dead:#4C5457;
-  --shadow:0 1px 2px rgba(0,0,0,.4); --lift:0 10px 28px rgba(0,0,0,.55); --drop:0 18px 56px rgba(0,0,0,.7);
+  --bg:#292c3c; --surface:#303446; --sunk:#232634; --card:#414559;
+  --ink:#c6d0f5; --muted:#a5adce; --faint:#838ba7;
+  --rule:#51576d; --hair:#414559;
+  --spark:#e5c890; --spark-ink:#232634;
+  --cold:#8caaee; --dead:#737994;
+  --shadow:0 1px 2px rgba(0,0,0,.35);
+  --lift:0 10px 28px rgba(0,0,0,.45);
+  --drop:0 18px 56px rgba(0,0,0,.6);
+  color-scheme:dark;
 }
+
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);
@@ -130,14 +143,17 @@ button,input,textarea,select{font:inherit;color:inherit}
   letter-spacing:.13em;text-transform:uppercase;opacity:0;transition:opacity .15s}
 .col:hover .col-duel,.col-duel:focus-visible{opacity:1}
 .col-duel:hover{color:var(--spark-ink);background:var(--spark)}
-.col-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 14px;
+.col-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;
   display:flex;flex-direction:column;gap:7px}
 .col-body::-webkit-scrollbar{width:8px}
 .col-body::-webkit-scrollbar-thumb{background:var(--rule);border-radius:4px}
 .col-empty{font-size:12.5px;color:var(--faint);padding:13px 8px;border:1px dashed var(--rule);
   border-radius:7px;text-align:center;line-height:1.4}
 
-.quick{flex:none;padding:0 10px 10px}
+/* A footer, not a card that happens to be last. Without the rule the scroll cut
+   lands flush against the input and the final card reads as broken rather than
+   scrolled. */
+.quick{flex:none;padding:10px;border-top:1px solid var(--hair)}
 .quick input{width:100%;background:var(--card);border:1px dashed var(--rule);border-radius:7px;
   padding:9px 10px;font-size:13px;color:var(--ink)}
 .quick input::placeholder{color:var(--faint)}
@@ -903,16 +919,28 @@ function toast(m){
   const el=$('toast'); el.textContent=m; el.classList.add('on');
   clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('on'),2800);
 }
-const tb=$('themeBtn');
+/* Three states, not two: system is the default and it stays live, so the board
+   follows a `theme` flip on the desktop without being touched. Only an explicit
+   light/dark choice writes data-theme. */
+const tb=$('themeBtn'), MODES=['system','light','dark'];
 const sysDark = ()=>matchMedia('(prefers-color-scheme:dark)').matches;
-const cur = ()=>document.documentElement.dataset.theme || (sysDark()?'dark':'light');
+let mode='system';
+try{ const saved=localStorage.getItem('pit-theme'); if(MODES.includes(saved)) mode=saved; }catch(_){}
+function applyTheme(){
+  const r=document.documentElement;
+  if(mode==='system') delete r.dataset.theme; else r.dataset.theme=mode;
+  tb.textContent = mode==='system' ? `auto · ${sysDark()?'dark':'light'}` : mode;
+  tb.title = mode==='system' ? 'Following the system. Click to pin light.'
+           : mode==='light'  ? 'Pinned light. Click to pin dark.'
+                             : 'Pinned dark. Click to follow the system again.';
+}
 tb.addEventListener('click', ()=>{
-  document.documentElement.dataset.theme = cur()==='dark'?'light':'dark';
-  tb.textContent = cur()==='dark'?'light':'dark';
-  try{ localStorage.setItem('pit-theme', cur()); }catch(_){}
+  mode = MODES[(MODES.indexOf(mode)+1)%MODES.length];
+  try{ localStorage.setItem('pit-theme', mode); }catch(_){}
+  applyTheme();
 });
-try{ const saved=localStorage.getItem('pit-theme'); if(saved) document.documentElement.dataset.theme=saved; }catch(_){}
-tb.textContent = cur()==='dark'?'light':'dark';
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change', ()=>{ if(mode==='system') applyTheme(); });
+applyTheme();
 
 /* ------------------------------ boot ------------------------------ */
 (async function(){

@@ -72,8 +72,8 @@ func writeLoginPage(w http.ResponseWriter, msg string) {
 <title>pit</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%227%22%20fill%3D%22%2314171A%22%2F%3E%3Crect%20x%3D%227%22%20y%3D%2214%22%20width%3D%227%22%20height%3D%2211%22%20rx%3D%222.5%22%20fill%3D%22%236A7276%22%2F%3E%3Crect%20x%3D%2218%22%20y%3D%227%22%20width%3D%227%22%20height%3D%2218%22%20rx%3D%222.5%22%20fill%3D%22%23E0A800%22%2F%3E%3C%2Fsvg%3E">
 <style>
-:root{color-scheme:light dark;--bg:#E7E9E6;--ink:#14171A;--muted:#6A7276;--rule:#C6CBC6;--card:#fff;--spark:#E0A800;--spark-ink:#231A00}
-@media(prefers-color-scheme:dark){:root{--bg:#0D1012;--ink:#E9EBE8;--muted:#8B9397;--rule:#2A3134;--card:#1B2023;--spark:#F2C318;--spark-ink:#1A1400}}
+:root{color-scheme:light;--bg:#faf4ed;--ink:#575279;--muted:#797593;--rule:#cecacd;--card:#fffaf3;--spark:#ea9d34;--spark-ink:#2a1f08}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#292c3c;--ink:#c6d0f5;--muted:#a5adce;--rule:#51576d;--card:#414559;--spark:#e5c890;--spark-ink:#232634}}
 body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);
 font-family:"Inter Tight",system-ui,-apple-system,sans-serif;font-size:14px}
 form{width:min(320px,90vw);display:flex;flex-direction:column;gap:10px}
