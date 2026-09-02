@@ -17,14 +17,18 @@ stare at; one card in the middle of the screen is a question you answer.
 **The sift** is the mechanic. One idea, full screen, four keys:
 
 ```
-              ↑  in        yes
-   ←  unsure                       →  maybe
-              ↓  out       no
+                    ↑  maybe
+      ←  out       [card]       →  in
+                    ↓  unsure
 
      space  skip — ask me again later this pass
      u      undo the last call
      n      fix the one-liner while it is in front of you
 ```
+
+Horizontal is the call, vertical is the defer. The two lanes that take most of
+the votes get the axis your hands know blind and the swipe everyone already
+knows; the two exceptions get the bars above and below, warmer one up.
 
 Twenty ideas takes about a minute. `unsure` is not a failure state — it is the
 honest answer often enough to deserve a key, and it leaves you a pile you can

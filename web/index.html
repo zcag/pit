@@ -189,7 +189,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .sift-scope{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--faint)}
 .sift-stage{flex:1;min-height:0;display:grid;gap:10px;padding:12px;
-  grid-template-columns:minmax(120px,16vw) minmax(0,1fr) minmax(120px,16vw);
+  grid-template-columns:minmax(140px,18vw) minmax(0,1fr) minmax(140px,18vw);
   grid-template-rows:auto minmax(0,1fr) auto}
 .zone{position:relative;overflow:hidden;border:1px dashed var(--rule);background:none;border-radius:9px;
   cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
@@ -215,10 +215,13 @@ button,input,textarea,select{font:inherit;color:inherit}
 .zone .lbl{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.13em;
   text-transform:uppercase}
 .zone .n{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--faint)}
-.zone.in{grid-column:2;grid-row:1;flex-direction:row;gap:10px}
-.zone.unsure{grid-column:1;grid-row:2}
-.zone.maybe{grid-column:3;grid-row:2}
-.zone.out{grid-column:2;grid-row:3;flex-direction:row;gap:10px}
+/* Horizontal is the call and vertical is the defer, so the two lanes that take
+   most of the votes get the full-height walls either side of the card and the
+   easiest keys to hit blind. */
+.zone.out{grid-column:1;grid-row:2}
+.zone.in{grid-column:3;grid-row:2}
+.zone.maybe{grid-column:2;grid-row:1;flex-direction:row;gap:10px}
+.zone.unsure{grid-column:2;grid-row:3;flex-direction:row;gap:10px}
 .zone.out:hover,.zone.out.armed{background:color-mix(in srgb,var(--dead) 20%,transparent);
   border-color:var(--dead);color:var(--muted)}
 
@@ -227,10 +230,10 @@ button,input,textarea,select{font:inherit;color:inherit}
   transition:transform .18s cubic-bezier(.2,.7,.3,1)}
 .pile{position:relative;width:min(820px,100%);max-height:100%;display:flex}
 /* Leaning toward the zone you are about to pick, before you pick it. */
-.sift-stage:has(.zone.in:hover) .deck{transform:translateY(-6px)}
-.sift-stage:has(.zone.out:hover) .deck{transform:translateY(6px)}
-.sift-stage:has(.zone.unsure:hover) .deck{transform:translateX(-8px) rotate(-.5deg)}
-.sift-stage:has(.zone.maybe:hover) .deck{transform:translateX(8px) rotate(.5deg)}
+.sift-stage:has(.zone.in:hover) .deck{transform:translateX(9px) rotate(.5deg)}
+.sift-stage:has(.zone.out:hover) .deck{transform:translateX(-9px) rotate(-.5deg)}
+.sift-stage:has(.zone.maybe:hover) .deck{transform:translateY(-6px)}
+.sift-stage:has(.zone.unsure:hover) .deck{transform:translateY(6px)}
 /* The queue as a pile: two card edges behind this one, so "13 left" is also
    something you see thinning out. */
 .deck i{position:absolute;left:0;right:0;top:0;bottom:0;border-radius:11px;
@@ -383,7 +386,7 @@ button,input,textarea,select{font:inherit;color:inherit}
   .deck{grid-column:1/-1;grid-row:1;align-self:stretch;width:100%}
   .deck i{display:none}
   .zone{grid-row:2 !important;flex-direction:column !important;gap:3px;padding:9px 4px}
-  .zone.unsure{grid-column:1}.zone.out{grid-column:2}.zone.maybe{grid-column:3}.zone.in{grid-column:4}
+  .zone.out{grid-column:1}.zone.unsure{grid-column:2}.zone.maybe{grid-column:3}.zone.in{grid-column:4}
   .zone .key{display:none}
   .drawer{width:100vw}
 }
@@ -472,8 +475,8 @@ function ago(iso){
    one, which is what lets four keys cover the whole vocabulary. */
 const LANES = ['unsorted','in','maybe','unsure','out'];
 const VOTES = ['in','maybe','unsure','out'];
-const ARROW = {in:'↑', maybe:'→', unsure:'←', out:'↓'};
-const KEYLANE = {ArrowUp:'in', ArrowRight:'maybe', ArrowLeft:'unsure', ArrowDown:'out'};
+const ARROW = {in:'→', maybe:'↑', unsure:'↓', out:'←'};
+const KEYLANE = {ArrowRight:'in', ArrowLeft:'out', ArrowUp:'maybe', ArrowDown:'unsure'};
 
 const $ = id => document.getElementById(id);
 const board=$('board'), statEl=$('statEl'), bdesc=$('bdesc'), siftEl=$('sift'),
@@ -747,7 +750,7 @@ const ms = n => CALM ? Math.round(n*.7) : n;
 const far = n => CALM ? Math.round(n*.09) : n;
 const spin = n => CALM ? 0 : n;
 // Where each lane lives, so a card leaves toward the zone that caught it.
-const AWAY = {in:[0,-1], out:[0,1], unsure:[-1,0], maybe:[1,0]};
+const AWAY = {in:[1,0], out:[-1,0], maybe:[0,-1], unsure:[0,1]};
 const EASE_OUT = 'cubic-bezier(.4,0,.75,.25)', EASE_IN = 'cubic-bezier(.2,.7,.3,1)';
 
 function zoneHTML(l){
@@ -861,7 +864,7 @@ function drawFoot(){
     `<span class="left-n tick">${q.length} left</span>
      <span class="meter"><i class="${pct===100?'full':''}" style="width:${pct}%"></i></span>
      <span class="tally">${tally||'nothing yet'}</span>
-     <span>↑↓←→ vote · space skip · u undo · n note · esc out</span>`;
+     <span>→ in · ← out · ↑ maybe · ↓ unsure · space skip · u undo · n note</span>`;
 }
 let lastLane = null;
 function drawDone(){
@@ -971,7 +974,7 @@ stage.addEventListener('touchend', e=>{
   if(!e.target.closest('.sift-card')) return;
   const t=e.changedTouches[0], dx=t.clientX-tx, dy=t.clientY-ty;
   if(Math.max(Math.abs(dx),Math.abs(dy)) < 60) return;
-  const lane = Math.abs(dx)>Math.abs(dy) ? (dx>0?'maybe':'unsure') : (dy<0?'in':'out');
+  const lane = Math.abs(dx)>Math.abs(dy) ? (dx>0?'in':'out') : (dy<0?'maybe':'unsure');
   vote(lane);
 }, {passive:true});
 
