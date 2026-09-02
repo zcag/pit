@@ -256,14 +256,16 @@ button,input,textarea,select{font:inherit;color:inherit}
 .sift-card .said{margin:0;padding:.6em .85em;background:var(--sunk);border-radius:7px;
   font-size:.92em;color:var(--muted);max-width:64ch}
 .sift-card .said b{color:var(--ink);font-weight:500}
-.jot{display:flex;gap:8px;align-items:center;margin:-.35em 0 0}
-.jot input{flex:1;min-width:0;max-width:52ch;background:none;border:0;
+.jot{display:flex;gap:8px;align-items:flex-start;margin:-.35em 0 0}
+.jot span{margin-top:.5em}
+.jot textarea{flex:1;min-width:0;max-width:52ch;background:none;border:0;resize:none;
+  overflow:hidden;display:block;line-height:1.42;
   border-bottom:1px dashed transparent;padding:2px 0;font-size:1.06em;color:var(--muted)}
-.jot:hover input{border-bottom-color:var(--rule)}
-.jot input:focus{outline:none;color:var(--ink);border-bottom-color:var(--spark);border-bottom-style:solid}
+.jot:hover textarea{border-bottom-color:var(--rule)}
+.jot textarea:focus{outline:none;color:var(--ink);border-bottom-color:var(--spark);border-bottom-style:solid}
 .jot input::placeholder{color:var(--faint)}
 .jot span{font-family:"JetBrains Mono",monospace;font-size:.7em;color:var(--faint);opacity:0}
-.jot:hover span,.jot input:focus + span{opacity:1}
+.jot:hover span,.jot textarea:focus + span{opacity:1}
 .sift-foot{flex:none;display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:11px 14px;
   border-top:1px solid var(--hair);font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
 .meter{flex:1;min-width:100px;height:3px;background:var(--sunk);border-radius:2px;overflow:hidden}
@@ -328,7 +330,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 .lbl{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
   color:var(--faint);display:block;margin:0 0 7px}
 .dw-text{width:100%;min-height:104px;background:var(--card);color:var(--ink);border:1px solid var(--hair);
-  border-radius:7px;padding:11px 12px;font-size:13.5px;line-height:1.55;resize:vertical;margin-bottom:20px}
+  border-radius:7px;padding:11px 12px;font-size:13.5px;line-height:1.55;resize:none;overflow:hidden;
+  margin-bottom:20px}
 .dw-text:focus{outline:none;border-color:var(--rule);box-shadow:0 0 0 3px color-mix(in srgb,var(--spark) 20%,transparent)}
 .dw-text::placeholder,.composer textarea::placeholder{color:var(--faint)}
 .cmt{padding:11px 0;border-bottom:1px solid var(--hair)}
@@ -384,7 +387,15 @@ button,input,textarea,select{font:inherit;color:inherit}
   .zone .key{display:none}
   .drawer{width:100vw}
 }
-@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms !important;animation-duration:.01ms !important}}
+/* Reduce, not remove. Blanking every duration to zero means someone with the
+   OS setting on gets no feedback at all — the flash, the fade and the counter
+   still say what happened; only the long travel and the leaning stop. */
+@media (prefers-reduced-motion:reduce){
+  .sift-stage:has(.zone:hover) .deck{transform:none}
+  .card.fresh{animation:none}
+  .done>*,.done li{animation:none}
+  .deck i{transition:none}
+}
 </style>
 </head>
 <body>
@@ -675,7 +686,7 @@ async function openDrawer(id){
 
   const grow = el => { el.style.height='auto'; el.style.height=el.scrollHeight+'px'; };
   const T=$('dwTitle'), N=$('dwNote'), BD=$('dwBody');
-  [T,N].forEach(el=>{ grow(el); el.addEventListener('input',()=>grow(el)); });
+  [T,N,BD].forEach(el=>{ grow(el); el.addEventListener('input',()=>grow(el)); });
   T.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); T.blur(); } });
 
   let t=null;
@@ -729,8 +740,12 @@ board.addEventListener('click', e=>{
 let q=[], scope=null, siftFor=null, busy=false, did={in:0,maybe:0,unsure:0,out:0}, started=0;
 let justVoted=null, enterFrom=null;
 
-const REDUCED = matchMedia('(prefers-reduced-motion:reduce)').matches;
-const ms = n => REDUCED ? 0 : n;
+// Someone with "Reduce motion" on still gets the fade and the flash; what they
+// do not get is a card flying 280px across the screen.
+const CALM = matchMedia('(prefers-reduced-motion:reduce)').matches;
+const ms = n => CALM ? Math.round(n*.7) : n;
+const far = n => CALM ? Math.round(n*.09) : n;
+const spin = n => CALM ? 0 : n;
 // Where each lane lives, so a card leaves toward the zone that caught it.
 const AWAY = {in:[0,-1], out:[0,1], unsure:[-1,0], maybe:[1,0]};
 const EASE_OUT = 'cubic-bezier(.4,0,.75,.25)', EASE_IN = 'cubic-bezier(.2,.7,.3,1)';
@@ -752,8 +767,8 @@ function drawCard(){
       <article class="sift-card" id="siftCard">
         <span class="src">${x.source==='agent'?'an agent suggested':'you wrote'} · ${ago(x.created_at)} ago</span>
         <h2>${esc(x.title)}</h2>
-        <div class="jot"><input id="jot" placeholder="one line — what it is"
-          value="${esc(x.note)}" autocomplete="off"><span>N</span></div>
+        <div class="jot"><textarea id="jot" rows="1" placeholder="one line — what it is"
+          autocomplete="off">${esc(x.note)}</textarea><span>N</span></div>
         ${x.body?`<p class="body">${esc(x.body)}</p>`:''}
         ${said?`<p class="said"><b>${said} note${said===1?'':'s'}</b> on this card — open it on the board to read them.</p>`:''}
       </article>
@@ -762,6 +777,19 @@ function drawCard(){
   fitCard();
   enter();
   drawFoot();
+  const j = $('jot');
+  if(j) j.addEventListener('input', ()=>{
+    growJot();
+    const deck = stage.querySelector('.deck'), card = $('siftCard');
+    if(deck && card && card.scrollHeight > deck.clientHeight) fitCard();  // shrink only
+  });
+}
+// The note wraps rather than clipping, so its box has to follow its content —
+// and it has to be right *before* the card is measured.
+function growJot(){
+  const j = $('jot'); if(!j) return;
+  j.style.height = 'auto';
+  j.style.height = j.scrollHeight + 'px';
 }
 /* The card is sized to its text rather than the text to the card: start
    generous, measure, and scale --fit down until it fits the height it has.
@@ -774,13 +802,15 @@ function fitCard(){
   if(!avail) return;
   let f = 1.42;
   const set = v => { f = Math.min(1.42, Math.max(.62, +v.toFixed(3)));
-                     card.style.setProperty('--fit', f); };
+                     card.style.setProperty('--fit', f); growJot(); };
   set(f);
   if(card.scrollHeight > avail) set(f * Math.max(.45, avail / card.scrollHeight));
   for(let i=0; i<7 && card.scrollHeight > avail && f > .621; i++) set(f - .05);
   card.classList.toggle('over', card.scrollHeight > card.clientHeight + 1);
 }
 addEventListener('resize', ()=>{ if(siftEl.classList.contains('on')) fitCard(); });
+// Measuring before the webfont lands sizes the card against fallback metrics.
+document.fonts.ready.then(()=>{ if(siftEl.classList.contains('on')) fitCard(); });
 
 /* Resting transforms of the two cards showing behind this one, and one step
    further back — the pile advances by animating between them. */
@@ -792,7 +822,7 @@ function enter(){
   const card = $('siftCard'); if(!card) return;
   const [dx,dy] = enterFrom ? AWAY[enterFrom] : [0,0];
   const back = enterFrom
-    ? {transform:`translate(${dx*180}px,${dy*110}px) rotate(${dx*3}deg) scale(.95)`, opacity:0}
+    ? {transform:`translate(${far(dx*180)}px,${far(dy*110)}px) rotate(${spin(dx*3)}deg) scale(.95)`, opacity:0}
     : {transform:REST.b1, opacity:.4};          // it rises out of the pile
   enterFrom = null;
   card.animate([back, {transform:'none', opacity:1}],
@@ -802,6 +832,11 @@ function enter(){
     if(g) g.animate([{transform:BACK[k], opacity:0}, {}], {duration: ms(320), easing: EASE_IN});
   }
 }
+/* Never let the UI wait on an animation: Chrome pauses them in a backgrounded
+   tab, so awaiting `finished` there freezes the sift on a card that has already
+   been decided. The clock wins if the animation does not report back. */
+const settle = (p, cap) => Promise.race([p, new Promise(r=>setTimeout(r, cap))]);
+
 function leave(lane){
   const card = $('siftCard');
   if(!card) return Promise.resolve();
@@ -814,7 +849,7 @@ function leave(lane){
     {duration: ms(240), easing: EASE_IN, fill:'forwards'});
   const a = card.animate(
     [{transform:'none', opacity:1},
-     {transform:`translate(${dx*280}px,${dy*160}px) rotate(${dx*4}deg) scale(.93)`, opacity:0}],
+     {transform:`translate(${far(dx*280)}px,${far(dy*160)}px) rotate(${spin(dx*4)}deg) scale(.93)`, opacity:0}],
     {duration: ms(240), easing: EASE_OUT, fill:'forwards'});
   return a.finished.catch(()=>{});
 }
@@ -870,16 +905,16 @@ async function vote(lane){
       el.getAnimations().forEach(a=>a.reverse()));
     return;
   }
-  await flying;
+  await settle(flying, ms(240) + 90);
   busy = false; drawCard();
 }
 async function skip(){
   if(busy || q.length<2) return;
   busy = true;
   const card = $('siftCard');
-  if(card) await card.animate(
-    [{transform:'none',opacity:1},{transform:'translateY(34px) scale(.93)',opacity:0}],
-    {duration: ms(190), easing: EASE_OUT, fill:'forwards'}).finished.catch(()=>{});
+  if(card) await settle(card.animate(
+    [{transform:'none',opacity:1},{transform:`translateY(${far(34)}px) scale(.93)`,opacity:0}],
+    {duration: ms(190), easing: EASE_OUT, fill:'forwards'}).finished.catch(()=>{}), ms(190) + 90);
   q.push(q.shift()); busy = false; drawCard();
   toast('skipped — it comes back at the end of this pass');
 }
