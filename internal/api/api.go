@@ -13,17 +13,12 @@ import (
 	"strings"
 
 	"github.com/zcag/pit/internal/model"
-	"github.com/zcag/pit/internal/rank"
 	"github.com/zcag/pit/internal/store"
 )
 
-// TopK is how many ideas the stopping rule cares about. Five is the number of
-// things a person can actually hold as "what I'm focused on".
+// TopK is how many ideas "the short answer" means. Five is the number of things
+// a person can actually hold as "what I'm focused on".
 const TopK = 5
-
-// bootstrapSamples trades accuracy for latency in the stability estimate. 200
-// resamples of a personal-scale log is a couple of milliseconds.
-const bootstrapSamples = 200
 
 type Config struct {
 	Store  *store.Store
@@ -67,9 +62,9 @@ func (s *Server) routes() {
 	api("GET /api/boards/{board}/ideas", s.listIdeas)
 	api("POST /api/boards/{board}/ideas", s.addIdeas)
 	api("GET /api/boards/{board}/top", s.top)
-	api("GET /api/boards/{board}/pair", s.pair)
-	api("POST /api/boards/{board}/duels", s.recordDuel)
-	api("POST /api/boards/{board}/duels/undo", s.undoDuel)
+	api("POST /api/boards/{board}/sift", s.sift)
+	api("POST /api/boards/{board}/sift/undo", s.undo)
+	api("GET /api/boards/{board}/log", s.log)
 
 	api("GET /api/ideas/{id}", s.getIdea)
 	api("PATCH /api/ideas/{id}", s.patchIdea)
@@ -180,14 +175,13 @@ func (s *Server) board(r *http.Request) (model.Board, error) {
 
 /* --------------------------------- boards --------------------------------- */
 
-// boardView is a board plus the one thing every caller wants next to it: is it
-// settled? An agent reading a board needs to know whether the ranking is worth
-// acting on, and making that a separate call guarantees it gets skipped.
+// boardView is a board plus the one thing every caller wants next to it: how
+// full each lane is. Unsorted is the number that decides whether you owe this
+// board a sift, and making it a second call guarantees it gets skipped.
 type boardView struct {
 	model.Board
-	Ideas   int          `json:"ideas"`
-	Live    int          `json:"live"`
-	Verdict rank.Verdict `json:"verdict"`
+	Ideas  int                `json:"ideas"`
+	Counts map[model.Lane]int `json:"counts"`
 }
 
 func (s *Server) view(b model.Board) (boardView, error) {
@@ -195,11 +189,7 @@ func (s *Server) view(b model.Board) (boardView, error) {
 	if err != nil {
 		return boardView{}, err
 	}
-	v, err := s.cfg.Store.Verdict(b, TopK, bootstrapSamples)
-	if err != nil {
-		return boardView{}, err
-	}
-	return boardView{Board: b, Ideas: len(ideas), Live: len(store.Live(b, ideas)), Verdict: v}, nil
+	return boardView{Board: b, Ideas: len(ideas), Counts: store.Counts(ideas)}, nil
 }
 
 func (s *Server) listBoards(w http.ResponseWriter, r *http.Request) {
@@ -217,23 +207,21 @@ func (s *Server) listBoards(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, v)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"boards": out})
+	writeJSON(w, http.StatusOK, map[string]any{"boards": out, "lanes": model.Lanes})
 }
 
 func (s *Server) createBoard(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Name        string   `json:"name"`
-		Slug        string   `json:"slug"`
-		Description string   `json:"description"`
-		Buckets     []string `json:"buckets"`
-		Terminal    string   `json:"terminal"`
+		Name        string            `json:"name"`
+		Slug        string            `json:"slug"`
+		Description string            `json:"description"`
+		Labels      map[string]string `json:"labels"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
 		return
 	}
-	b := model.Board{Name: in.Name, Slug: in.Slug, Description: in.Description,
-		Buckets: in.Buckets, Terminal: in.Terminal}
+	b := model.Board{Name: in.Name, Slug: in.Slug, Description: in.Description, Labels: in.Labels}
 	if err := s.cfg.Store.CreateBoard(&b); err != nil {
 		fail(w, err)
 		return
@@ -257,17 +245,15 @@ func (s *Server) getBoard(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) patchBoard(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Name        *string   `json:"name"`
-		Description *string   `json:"description"`
-		Buckets     *[]string `json:"buckets"`
-		Terminal    *string   `json:"terminal"`
-		Intake      *string   `json:"intake"`
+		Name        *string           `json:"name"`
+		Description *string           `json:"description"`
+		Labels      map[string]string `json:"labels"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
 		return
 	}
-	b, err := s.cfg.Store.UpdateBoard(r.PathValue("board"), in.Name, in.Description, in.Buckets, in.Terminal, in.Intake)
+	b, err := s.cfg.Store.UpdateBoard(r.PathValue("board"), in.Name, in.Description, in.Labels)
 	if err != nil {
 		fail(w, err)
 		return
@@ -296,8 +282,8 @@ func (s *Server) listIdeas(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	if bucket := r.URL.Query().Get("bucket"); bucket != "" {
-		ideas = filter(ideas, func(i model.Idea) bool { return i.Bucket == bucket })
+	if lane := r.URL.Query().Get("lane"); lane != "" {
+		ideas = store.InLane(ideas, model.Lane(lane))
 	}
 	if src := r.URL.Query().Get("source"); src != "" {
 		ideas = filter(ideas, func(i model.Idea) bool { return string(i.Source) == src })
@@ -314,10 +300,10 @@ func (s *Server) addIdeas(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Source string `json:"source"`
 		Ideas  []struct {
-			Title  string `json:"title"`
-			Note   string `json:"note"`
-			Body   string `json:"body"`
-			Bucket string `json:"bucket"`
+			Title string `json:"title"`
+			Note  string `json:"note"`
+			Body  string `json:"body"`
+			Lane  string `json:"lane"`
 		} `json:"ideas"`
 	}
 	if err := decode(r, &in); err != nil {
@@ -325,15 +311,10 @@ func (s *Server) addIdeas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	src := sourceOf(in.Source)
-	inbox := b.Intake
 	batch := make([]model.Idea, 0, len(in.Ideas))
 	for _, it := range in.Ideas {
-		bucket := it.Bucket
-		if bucket == "" {
-			bucket = inbox
-		}
 		batch = append(batch, model.Idea{Title: it.Title, Note: it.Note, Body: it.Body,
-			Bucket: bucket, Source: src})
+			Lane: model.Lane(it.Lane), Source: src})
 	}
 	out, err := s.cfg.Store.AddIdeas(b.ID, batch)
 	if err != nil {
@@ -352,22 +333,31 @@ func (s *Server) getIdea(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, it)
 }
 
+// patchIdea edits the text of an idea. Moving it is a decision, so it goes
+// through the sift log instead: POST /sift, or /place for a drag.
 func (s *Server) patchIdea(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Title  *string `json:"title"`
-		Note   *string `json:"note"`
-		Body   *string `json:"body"`
-		Bucket *string `json:"bucket"`
+		Title *string `json:"title"`
+		Note  *string `json:"note"`
+		Body  *string `json:"body"`
+		Lane  *string `json:"lane"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
 		return
 	}
 	it, err := s.cfg.Store.UpdateIdea(r.PathValue("id"),
-		store.IdeaPatch{Title: in.Title, Note: in.Note, Body: in.Body, Bucket: in.Bucket})
+		store.IdeaPatch{Title: in.Title, Note: in.Note, Body: in.Body})
 	if err != nil {
 		fail(w, err)
 		return
+	}
+	if in.Lane != nil && *in.Lane != string(it.Lane) {
+		it, err = s.cfg.Store.Move(it.BoardID, it.ID, model.Lane(*in.Lane), nil)
+		if err != nil {
+			fail(w, err)
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, it)
 }
@@ -380,25 +370,28 @@ func (s *Server) deleteIdea(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// placeIdea is a drag: a rating asserted by hand. Deliberately not exposed over
-// MCP — an agent must not be able to set a rating, or the board stops being
-// evidence of what the owner thinks.
+// placeIdea is a drag: a lane and an exact position, asserted by hand. Same
+// write and same log entry as a sift vote — the only difference is that you
+// chose where in the lane it lands.
 func (s *Server) placeIdea(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Rating float64 `json:"rating"`
-		Bucket *string `json:"bucket"`
+		Lane string   `json:"lane"`
+		Pos  *float64 `json:"pos"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
 		return
 	}
-	if in.Bucket != nil {
-		if _, err := s.cfg.Store.UpdateIdea(r.PathValue("id"), store.IdeaPatch{Bucket: in.Bucket}); err != nil {
-			fail(w, err)
-			return
-		}
+	it, err := s.cfg.Store.Idea(r.PathValue("id"))
+	if err != nil {
+		fail(w, err)
+		return
 	}
-	it, err := s.cfg.Store.PlaceIdea(r.PathValue("id"), in.Rating)
+	lane := model.Lane(in.Lane)
+	if lane == "" {
+		lane = it.Lane
+	}
+	it, err = s.cfg.Store.Move(it.BoardID, it.ID, lane, in.Pos)
 	if err != nil {
 		fail(w, err)
 		return
@@ -423,10 +416,64 @@ func (s *Server) addComment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, c)
 }
 
-/* --------------------------------- ranking -------------------------------- */
+/* --------------------------------- sifting -------------------------------- */
 
-// top is the short answer, and it always ships the settled flag with it. A
-// ranking without a confidence signal invites an agent to act on noise.
+// sift is one vote. The card lands at the end of its new lane, which is what
+// makes a sift session read back in the order you decided it.
+func (s *Server) sift(w http.ResponseWriter, r *http.Request) {
+	b, err := s.board(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	var in struct {
+		Idea string `json:"idea"`
+		Lane string `json:"lane"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	it, err := s.cfg.Store.Move(b.ID, in.Idea, model.Lane(in.Lane), nil)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, it)
+}
+
+// undo voids the last decision and hands back the restored card, so a client
+// mid-sift can show it again without reloading the board.
+func (s *Server) undo(w http.ResponseWriter, r *http.Request) {
+	b, err := s.board(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	it, err := s.cfg.Store.UndoLast(b.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, it)
+}
+
+func (s *Server) log(w http.ResponseWriter, r *http.Request) {
+	b, err := s.board(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	n, _ := strconv.Atoi(r.URL.Query().Get("n"))
+	sifts, err := s.cfg.Store.SiftLog(b.ID, n)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"board": b.Slug, "sifts": sifts})
+}
+
+// top is the short answer: the in lane, in the order you put it in.
 func (s *Server) top(w http.ResponseWriter, r *http.Request) {
 	b, err := s.board(r)
 	if err != nil {
@@ -444,100 +491,24 @@ func (s *Server) top(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	live := store.Live(b, ideas)
-	v, err := s.cfg.Store.Verdict(b, k, bootstrapSamples)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	if k > len(live) {
-		k = len(live)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"board":   b.Slug,
-		"verdict": v,
-		"top":     live[:k], // ListIdeas already orders by rating desc
-	})
+	writeJSON(w, http.StatusOK, topPayload(b, ideas, k))
 }
 
-// pair hands back the next comparison worth asking. Putting the choice on the
-// server means every client — web, phone, a future CLI — gets the same adaptive
-// pairing rather than each reinventing a worse one.
-func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
-	b, err := s.board(r)
-	if err != nil {
-		fail(w, err)
-		return
+// topPayload is shared with the MCP tool: the in lane, trimmed to k, plus what
+// is still waiting — a top five drawn from a board with forty unsorted ideas is
+// a provisional answer and should say so.
+func topPayload(b model.Board, ideas []model.Idea, k int) map[string]any {
+	in := store.InLane(ideas, model.In)
+	if k < len(in) {
+		in = in[:k]
 	}
-	ideas, err := s.cfg.Store.ListIdeas(b.ID)
-	if err != nil {
-		fail(w, err)
-		return
+	counts := store.Counts(ideas)
+	return map[string]any{
+		"board":    b.Slug,
+		"top":      in,
+		"unsorted": counts[model.Unsorted],
+		"unsure":   counts[model.Unsure],
 	}
-	live := store.Live(b, ideas)
-	if bucket := r.URL.Query().Get("bucket"); bucket != "" {
-		scoped := filter(live, func(i model.Idea) bool { return i.Bucket == bucket })
-		if len(scoped) >= 2 {
-			live = scoped
-		}
-	}
-	a, bb, ok := rank.NextPair(store.Items(live), TopK, nil)
-	if !ok {
-		writeJSON(w, http.StatusOK, map[string]any{"exhausted": true})
-		return
-	}
-	byID := map[string]model.Idea{}
-	for _, it := range live {
-		byID[it.ID] = it
-	}
-	v, err := s.cfg.Store.Verdict(b, TopK, bootstrapSamples)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"a": byID[a.ID], "b": byID[bb.ID], "verdict": v,
-	})
-}
-
-func (s *Server) recordDuel(w http.ResponseWriter, r *http.Request) {
-	b, err := s.board(r)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	var in struct {
-		Winner string `json:"winner"`
-		Loser  string `json:"loser"`
-	}
-	if err := decode(r, &in); err != nil {
-		fail(w, err)
-		return
-	}
-	d, err := s.cfg.Store.RecordDuel(b.ID, in.Winner, in.Loser)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	v, err := s.cfg.Store.Verdict(b, TopK, bootstrapSamples)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"duel": d, "verdict": v})
-}
-
-func (s *Server) undoDuel(w http.ResponseWriter, r *http.Request) {
-	b, err := s.board(r)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	if err := s.cfg.Store.UndoLastDuel(b.ID); err != nil {
-		fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"undone": b.Slug})
 }
 
 func filter[T any](in []T, keep func(T) bool) []T {

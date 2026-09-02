@@ -1,5 +1,5 @@
 [Unit]
-Description=pit idea ranker
+Description=pit idea sifter
 Documentation=https://pit.example.com file://%h/pit/pit
 After=network.target
 

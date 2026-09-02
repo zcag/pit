@@ -1,9 +1,9 @@
 // Package store is pit's SQLite persistence layer.
 //
-// The schema keeps duels in their own append-only table rather than folding
-// them into idea ratings. Ratings on the ideas table are a cache: Recompute
-// rebuilds them from the log, which is what lets the rating system change
-// without a migration and what makes undo a one-row write.
+// The schema keeps decisions in their own append-only table rather than only in
+// the lane column on ideas. An idea's lane and position are the current state;
+// the sifts log is how it got there, which is what makes undo a one-row write
+// and what lets a board tell you what you decided last Tuesday.
 package store
 
 import (
@@ -11,13 +11,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/zcag/pit/internal/model"
-	"github.com/zcag/pit/internal/rank"
 	_ "modernc.org/sqlite" // pure-Go driver: CGO_ENABLED=0 cross-compiles cleanly
 )
 
@@ -25,18 +23,17 @@ var ErrNotFound = errors.New("not found")
 
 type Store struct{ db *sql.DB }
 
-const schema = `
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
+// schemaVersion 2 replaced the per-board bucket vocabulary with the fixed lane
+// spine and made the sift, not the duel, the thing that moves a card.
+const schemaVersion = 2
 
+const schema = `
 CREATE TABLE IF NOT EXISTS boards (
   id          TEXT PRIMARY KEY,
   slug        TEXT NOT NULL UNIQUE,
   name        TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
-  buckets     TEXT NOT NULL,
-  terminal    TEXT NOT NULL,
-  intake      TEXT NOT NULL DEFAULT 'inbox',
+  labels      TEXT NOT NULL DEFAULT '{}',
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL
 );
@@ -47,18 +44,13 @@ CREATE TABLE IF NOT EXISTS ideas (
   title      TEXT NOT NULL,
   note       TEXT NOT NULL DEFAULT '',
   body       TEXT NOT NULL DEFAULT '',
-  bucket     TEXT NOT NULL,
+  lane       TEXT NOT NULL,
   source     TEXT NOT NULL,
-  rating     REAL NOT NULL,
-  rd         REAL NOT NULL,
-  sigma      REAL NOT NULL,
-  wins       INTEGER NOT NULL DEFAULT 0,
-  losses     INTEGER NOT NULL DEFAULT 0,
-  pinned     INTEGER NOT NULL DEFAULT 0,
+  pos        REAL NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_ideas_board ON ideas(board_id);
+CREATE INDEX IF NOT EXISTS idx_ideas_board ON ideas(board_id, lane, pos);
 
 CREATE TABLE IF NOT EXISTS comments (
   id         TEXT PRIMARY KEY,
@@ -69,18 +61,35 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 CREATE INDEX IF NOT EXISTS idx_comments_idea ON comments(idea_id);
 
--- Append-only. An undo sets voided = 1; nothing is ever deleted, so the log
--- stays a faithful record of every question that was actually asked.
-CREATE TABLE IF NOT EXISTS duels (
+-- Append-only. An undo sets voided = 1 and puts the card back where it was;
+-- nothing is ever deleted, so the log stays a record of every call you made.
+CREATE TABLE IF NOT EXISTS sifts (
   id         TEXT PRIMARY KEY,
   board_id   TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  idea_id    TEXT NOT NULL,
+  from_lane  TEXT NOT NULL,
+  to_lane    TEXT NOT NULL,
+  from_pos   REAL NOT NULL,
+  voided     INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sifts_board ON sifts(board_id, created_at);
+
+-- Shelved with the duel (see README). The rows are kept: if pairwise ranking
+-- comes back it comes back with its history, not from zero.
+CREATE TABLE IF NOT EXISTS duels (
+  id         TEXT PRIMARY KEY,
+  board_id   TEXT NOT NULL,
   winner_id  TEXT NOT NULL,
   loser_id   TEXT NOT NULL,
   voided     INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_duels_board ON duels(board_id, created_at);
 `
+
+// laneOrder sorts a board best-first for anything that reads it as a list.
+const laneOrder = `CASE lane WHEN 'in' THEN 0 WHEN 'maybe' THEN 1 WHEN 'unsure' THEN 2
+                            WHEN 'unsorted' THEN 3 ELSE 4 END, pos, id`
 
 func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)")
@@ -90,13 +99,227 @@ func Open(path string) (*Store, error) {
 	// SQLite writes serialise anyway; one connection avoids "database is locked"
 	// entirely at the cost of nothing at personal scale.
 	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA journal_mode = WAL`); err != nil {
+		return nil, err
+	}
+	s := &Store{db: db}
+	if err := s.migrate(); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
 	if _, err := db.Exec(schema); err != nil {
 		return nil, fmt.Errorf("schema: %w", err)
 	}
-	return &Store{db: db}, nil
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+/* -------------------------------- migration -------------------------------- */
+
+func (s *Store) migrate() error {
+	var v int
+	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+		return err
+	}
+	if v >= schemaVersion {
+		return nil
+	}
+	legacy, err := s.hasColumn("boards", "buckets")
+	if err != nil {
+		return err
+	}
+	if legacy {
+		if err := s.migrateBucketsToLanes(); err != nil {
+			return err
+		}
+	}
+	_, err = s.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion))
+	return err
+}
+
+func (s *Store) hasColumn(table, col string) (bool, error) {
+	rows, err := s.db.Query(fmt.Sprintf(`PRAGMA table_info(%s)`, table))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == col {
+			return true, rows.Err()
+		}
+	}
+	return false, rows.Err()
+}
+
+// migrateBucketsToLanes rebuilds boards and ideas on the lane spine. Ratings
+// become positions in rank order, so the ordering a duel earned survives as the
+// hand order of the new board; the duel log itself is left alone.
+func (s *Store) migrateBucketsToLanes() error {
+	type oldBoard struct{ id, buckets, terminal, intake string }
+	var obs []oldBoard
+	rows, err := s.db.Query(`SELECT id,buckets,terminal,intake FROM boards`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var o oldBoard
+		if err := rows.Scan(&o.id, &o.buckets, &o.terminal, &o.intake); err != nil {
+			rows.Close()
+			return err
+		}
+		obs = append(obs, o)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	labels := map[string]string{}    // board id -> labels JSON
+	lanes := map[string]model.Lane{} // idea id -> lane
+	for _, o := range obs {
+		var buckets []string
+		_ = json.Unmarshal([]byte(o.buckets), &buckets)
+		lbl := map[string]string{}
+		for _, bk := range buckets {
+			l := laneOf(bk, o.intake, o.terminal)
+			// Keep a genuinely custom name ("drafting"); drop the defaults, which
+			// the new vocabulary replaces outright.
+			if _, taken := lbl[string(l)]; !taken && !stock(bk) {
+				lbl[string(l)] = bk
+			}
+		}
+		j, _ := json.Marshal(lbl)
+		labels[o.id] = string(j)
+
+		ir, err := s.db.Query(`SELECT id,bucket FROM ideas WHERE board_id = ? ORDER BY rating DESC, id`, o.id)
+		if err != nil {
+			return err
+		}
+		for ir.Next() {
+			var id, bucket string
+			if err := ir.Scan(&id, &bucket); err != nil {
+				ir.Close()
+				return err
+			}
+			lanes[id] = laneOf(bucket, o.intake, o.terminal)
+		}
+		ir.Close()
+		if err := ir.Err(); err != nil {
+			return err
+		}
+	}
+
+	// The rename must not rewrite the foreign keys that point at these tables:
+	// comments references ideas(id) and has to keep pointing at the table we are
+	// about to recreate under that name, not follow it to the archive copy.
+	if _, err := s.db.Exec(`PRAGMA legacy_alter_table = ON; PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer s.db.Exec(`PRAGMA legacy_alter_table = OFF`)
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`ALTER TABLE boards RENAME TO boards_v1;
+	                      ALTER TABLE ideas  RENAME TO ideas_v1`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(schema); err != nil {
+		return err
+	}
+	for id, lbl := range labels {
+		if _, err := tx.Exec(
+			`INSERT INTO boards (id,slug,name,description,labels,created_at,updated_at)
+			 SELECT id,slug,name,description,?,created_at,updated_at FROM boards_v1 WHERE id = ?`,
+			lbl, id); err != nil {
+			return err
+		}
+	}
+	// One position sequence per board, in the order the old ratings gave.
+	seq := map[string]float64{}
+	ir, err := tx.Query(`SELECT id,board_id FROM ideas_v1 ORDER BY board_id, rating DESC, id`)
+	if err != nil {
+		return err
+	}
+	type row struct{ id, board string }
+	var all []row
+	for ir.Next() {
+		var r row
+		if err := ir.Scan(&r.id, &r.board); err != nil {
+			ir.Close()
+			return err
+		}
+		all = append(all, r)
+	}
+	ir.Close()
+	if err := ir.Err(); err != nil {
+		return err
+	}
+	for _, r := range all {
+		seq[r.board]++
+		lane := lanes[r.id]
+		if lane == "" {
+			lane = model.Unsorted
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO ideas (id,board_id,title,note,body,lane,source,pos,created_at,updated_at)
+			 SELECT id,board_id,title,note,body,?,source,?,created_at,updated_at FROM ideas_v1 WHERE id = ?`,
+			string(lane), seq[r.board], r.id); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`DROP TABLE ideas_v1; DROP TABLE boards_v1`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// laneOf maps a v1 bucket onto the spine. The board's own intake and terminal
+// win over the name, because a board could rename either.
+func laneOf(bucket, intake, terminal string) model.Lane {
+	switch bucket {
+	case terminal:
+		return model.Out
+	case intake:
+		return model.Unsorted
+	}
+	switch strings.ToLower(bucket) {
+	case "shortlist", "drafting", "doing", "in", "yes", "now":
+		return model.In
+	case "parked", "unsure", "someday", "later":
+		return model.Unsure
+	case "inbox", "unsorted":
+		return model.Unsorted
+	case "dead", "out", "no":
+		return model.Out
+	}
+	return model.Maybe
+}
+
+// stock reports whether a v1 bucket name is one the new spine already says
+// better, and so is not worth carrying over as a label.
+func stock(bucket string) bool {
+	switch strings.ToLower(bucket) {
+	case "shortlist", "maybe", "inbox", "parked", "dead", "in", "out", "unsure", "unsorted":
+		return true
+	}
+	return false
+}
+
+/* --------------------------------- helpers --------------------------------- */
 
 func newID() string { return ulid.Make().String() }
 
@@ -127,6 +350,8 @@ func Slugify(s string) string {
 	return strings.Trim(b.String(), "-")
 }
 
+type scanner interface{ Scan(...any) error }
+
 /* ---------------------------------- boards --------------------------------- */
 
 func (s *Store) CreateBoard(b *model.Board) error {
@@ -136,29 +361,20 @@ func (s *Store) CreateBoard(b *model.Board) error {
 	if b.Slug == "" {
 		return errors.New("board needs a name")
 	}
-	if len(b.Buckets) == 0 {
-		b.Buckets = model.DefaultBuckets
-	}
-	if b.Terminal == "" {
-		b.Terminal = model.DefaultTerminal
-	}
-	if !contains(b.Buckets, b.Terminal) {
-		return fmt.Errorf("terminal bucket %q is not in the bucket list", b.Terminal)
-	}
-	if b.Intake == "" || !contains(b.Buckets, b.Intake) {
-		b.Intake = model.ResolveIntake(b.Buckets, b.Terminal)
+	if err := checkLabels(b.Labels); err != nil {
+		return err
 	}
 	b.ID, b.CreatedAt, b.UpdatedAt = newID(), time.Now().UTC(), time.Now().UTC()
-	buckets, _ := json.Marshal(b.Buckets)
+	labels, _ := json.Marshal(nonNil(b.Labels))
 	_, err := s.db.Exec(
-		`INSERT INTO boards (id,slug,name,description,buckets,terminal,intake,created_at,updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?)`,
-		b.ID, b.Slug, b.Name, b.Description, string(buckets), b.Terminal, b.Intake, now(), now())
+		`INSERT INTO boards (id,slug,name,description,labels,created_at,updated_at)
+		 VALUES (?,?,?,?,?,?,?)`,
+		b.ID, b.Slug, b.Name, b.Description, string(labels), now(), now())
 	return err
 }
 
 func (s *Store) ListBoards() ([]model.Board, error) {
-	rows, err := s.db.Query(`SELECT id,slug,name,description,buckets,terminal,intake,created_at,updated_at
+	rows, err := s.db.Query(`SELECT id,slug,name,description,labels,created_at,updated_at
 	                          FROM boards ORDER BY created_at`)
 	if err != nil {
 		return nil, err
@@ -178,7 +394,7 @@ func (s *Store) ListBoards() ([]model.Board, error) {
 // Board resolves either a slug or an id, so URLs can stay readable while the
 // API stays stable.
 func (s *Store) Board(ref string) (model.Board, error) {
-	row := s.db.QueryRow(`SELECT id,slug,name,description,buckets,terminal,intake,created_at,updated_at
+	row := s.db.QueryRow(`SELECT id,slug,name,description,labels,created_at,updated_at
 	                       FROM boards WHERE slug = ? OR id = ?`, ref, ref)
 	b, err := scanBoard(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -187,22 +403,21 @@ func (s *Store) Board(ref string) (model.Board, error) {
 	return b, err
 }
 
-type scanner interface{ Scan(...any) error }
-
 func scanBoard(sc scanner) (model.Board, error) {
 	var b model.Board
-	var buckets, created, updated string
-	if err := sc.Scan(&b.ID, &b.Slug, &b.Name, &b.Description, &buckets, &b.Terminal, &b.Intake, &created, &updated); err != nil {
+	var labels, created, updated string
+	if err := sc.Scan(&b.ID, &b.Slug, &b.Name, &b.Description, &labels, &created, &updated); err != nil {
 		return b, err
 	}
-	_ = json.Unmarshal([]byte(buckets), &b.Buckets)
+	_ = json.Unmarshal([]byte(labels), &b.Labels)
+	b.Labels = nonNil(b.Labels)
 	b.CreatedAt, b.UpdatedAt = parseTime(created), parseTime(updated)
 	return b, nil
 }
 
-// UpdateBoard applies non-nil fields only, so a caller editing just the
-// description cannot accidentally clear the bucket list.
-func (s *Store) UpdateBoard(ref string, name, description *string, buckets *[]string, terminal, intake *string) (model.Board, error) {
+// UpdateBoard applies non-nil fields only. Labels merge rather than replace, and
+// an empty string clears one lane's label back to its own name.
+func (s *Store) UpdateBoard(ref string, name, description *string, labels map[string]string) (model.Board, error) {
 	b, err := s.Board(ref)
 	if err != nil {
 		return b, err
@@ -213,24 +428,19 @@ func (s *Store) UpdateBoard(ref string, name, description *string, buckets *[]st
 	if description != nil {
 		b.Description = *description
 	}
-	if buckets != nil && len(*buckets) > 0 {
-		b.Buckets = *buckets
+	if err := checkLabels(labels); err != nil {
+		return b, err
 	}
-	if terminal != nil && *terminal != "" {
-		b.Terminal = *terminal
+	for k, v := range labels {
+		if v == "" {
+			delete(b.Labels, k)
+		} else {
+			b.Labels[k] = v
+		}
 	}
-	if intake != nil && *intake != "" {
-		b.Intake = *intake
-	}
-	if !contains(b.Buckets, b.Terminal) {
-		return b, fmt.Errorf("terminal bucket %q is not in the bucket list", b.Terminal)
-	}
-	if !contains(b.Buckets, b.Intake) {
-		b.Intake = model.ResolveIntake(b.Buckets, b.Terminal)
-	}
-	bs, _ := json.Marshal(b.Buckets)
-	_, err = s.db.Exec(`UPDATE boards SET name=?,description=?,buckets=?,terminal=?,intake=?,updated_at=? WHERE id=?`,
-		b.Name, b.Description, string(bs), b.Terminal, b.Intake, now(), b.ID)
+	j, _ := json.Marshal(nonNil(b.Labels))
+	_, err = s.db.Exec(`UPDATE boards SET name=?,description=?,labels=?,updated_at=? WHERE id=?`,
+		b.Name, b.Description, string(j), now(), b.ID)
 	b.UpdatedAt = time.Now().UTC()
 	return b, err
 }
@@ -242,6 +452,22 @@ func (s *Store) DeleteBoard(ref string) error {
 	}
 	_, err = s.db.Exec(`DELETE FROM boards WHERE id = ?`, b.ID)
 	return err
+}
+
+func checkLabels(l map[string]string) error {
+	for k := range l {
+		if !model.ValidLane(model.Lane(k)) {
+			return fmt.Errorf("%q is not a lane; lanes are unsorted, in, maybe, unsure, out", k)
+		}
+	}
+	return nil
+}
+
+func nonNil(m map[string]string) map[string]string {
+	if m == nil {
+		return map[string]string{}
+	}
+	return m
 }
 
 /* ---------------------------------- ideas ---------------------------------- */
@@ -256,23 +482,37 @@ func (s *Store) AddIdeas(boardID string, in []model.Idea) ([]model.Idea, error) 
 	}
 	defer tx.Rollback()
 
+	next := map[model.Lane]float64{}
 	out := make([]model.Idea, 0, len(in))
 	for _, it := range in {
 		if strings.TrimSpace(it.Title) == "" {
 			return nil, errors.New("idea needs a title")
 		}
+		if it.Lane == "" {
+			it.Lane = model.Unsorted
+		}
+		if !model.ValidLane(it.Lane) {
+			return nil, fmt.Errorf("%q is not a lane", it.Lane)
+		}
+		if _, ok := next[it.Lane]; !ok {
+			p, err := tailPos(tx, boardID, it.Lane)
+			if err != nil {
+				return nil, err
+			}
+			next[it.Lane] = p
+		}
 		it.ID, it.BoardID = newID(), boardID
-		it.Rating, it.RD, it.Sigma = rank.DefaultR, rank.DefaultRD, rank.DefaultVol
-		it.Wins, it.Losses, it.Pinned = 0, 0, false
+		it.Pos = next[it.Lane]
+		next[it.Lane]++
 		it.CreatedAt, it.UpdatedAt = time.Now().UTC(), time.Now().UTC()
 		if it.Source == "" {
 			it.Source = model.SourceHuman
 		}
 		if _, err := tx.Exec(
-			`INSERT INTO ideas (id,board_id,title,note,body,bucket,source,rating,rd,sigma,wins,losses,pinned,created_at,updated_at)
-			 VALUES (?,?,?,?,?,?,?,?,?,?,0,0,0,?,?)`,
-			it.ID, it.BoardID, it.Title, it.Note, it.Body, it.Bucket, string(it.Source),
-			it.Rating, it.RD, it.Sigma, now(), now()); err != nil {
+			`INSERT INTO ideas (id,board_id,title,note,body,lane,source,pos,created_at,updated_at)
+			 VALUES (?,?,?,?,?,?,?,?,?,?)`,
+			it.ID, it.BoardID, it.Title, it.Note, it.Body, string(it.Lane), string(it.Source),
+			it.Pos, now(), now()); err != nil {
 			return nil, err
 		}
 		out = append(out, it)
@@ -280,10 +520,30 @@ func (s *Store) AddIdeas(boardID string, in []model.Idea) ([]model.Idea, error) 
 	return out, tx.Commit()
 }
 
+type execQuerier interface {
+	QueryRow(string, ...any) *sql.Row
+	Exec(string, ...any) (sql.Result, error)
+}
+
+// tailPos is the position just past the end of a lane — where a fresh card or a
+// just-sifted one lands.
+func tailPos(q execQuerier, boardID string, lane model.Lane) (float64, error) {
+	var p sql.NullFloat64
+	err := q.QueryRow(`SELECT MAX(pos) FROM ideas WHERE board_id = ? AND lane = ?`,
+		boardID, string(lane)).Scan(&p)
+	if err != nil {
+		return 0, err
+	}
+	if !p.Valid {
+		return 1, nil
+	}
+	return p.Float64 + 1, nil
+}
+
 func (s *Store) ListIdeas(boardID string) ([]model.Idea, error) {
 	rows, err := s.db.Query(
-		`SELECT id,board_id,title,note,body,bucket,source,rating,rd,sigma,wins,losses,pinned,created_at,updated_at
-		 FROM ideas WHERE board_id = ? ORDER BY rating DESC, id`, boardID)
+		`SELECT id,board_id,title,note,body,lane,source,pos,created_at,updated_at
+		 FROM ideas WHERE board_id = ? ORDER BY `+laneOrder, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +592,7 @@ func (s *Store) commentCounts(boardID string) (map[string]int, error) {
 
 func (s *Store) Idea(id string) (model.Idea, error) {
 	row := s.db.QueryRow(
-		`SELECT id,board_id,title,note,body,bucket,source,rating,rd,sigma,wins,losses,pinned,created_at,updated_at
+		`SELECT id,board_id,title,note,body,lane,source,pos,created_at,updated_at
 		 FROM ideas WHERE id = ?`, id)
 	it, err := scanIdea(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -348,14 +608,12 @@ func (s *Store) Idea(id string) (model.Idea, error) {
 
 func scanIdea(sc scanner) (model.Idea, error) {
 	var it model.Idea
-	var src, created, updated string
-	var pinned int
-	if err := sc.Scan(&it.ID, &it.BoardID, &it.Title, &it.Note, &it.Body, &it.Bucket, &src,
-		&it.Rating, &it.RD, &it.Sigma, &it.Wins, &it.Losses, &pinned, &created, &updated); err != nil {
+	var lane, src, created, updated string
+	if err := sc.Scan(&it.ID, &it.BoardID, &it.Title, &it.Note, &it.Body, &lane, &src,
+		&it.Pos, &created, &updated); err != nil {
 		return it, err
 	}
-	it.Source = model.Source(src)
-	it.Pinned = pinned == 1
+	it.Lane, it.Source = model.Lane(lane), model.Source(src)
 	it.CreatedAt, it.UpdatedAt = parseTime(created), parseTime(updated)
 	return it, nil
 }
@@ -363,10 +621,9 @@ func scanIdea(sc scanner) (model.Idea, error) {
 // IdeaPatch is a sparse edit. Nil means "leave alone" — an agent fixing a typo
 // in the body must not blank the note.
 type IdeaPatch struct {
-	Title  *string
-	Note   *string
-	Body   *string
-	Bucket *string
+	Title *string
+	Note  *string
+	Body  *string
 }
 
 func (s *Store) UpdateIdea(id string, p IdeaPatch) (model.Idea, error) {
@@ -383,30 +640,9 @@ func (s *Store) UpdateIdea(id string, p IdeaPatch) (model.Idea, error) {
 	if p.Body != nil {
 		it.Body = *p.Body
 	}
-	if p.Bucket != nil {
-		it.Bucket = *p.Bucket
-	}
-	_, err = s.db.Exec(`UPDATE ideas SET title=?,note=?,body=?,bucket=?,updated_at=? WHERE id=?`,
-		it.Title, it.Note, it.Body, it.Bucket, now(), it.ID)
+	_, err = s.db.Exec(`UPDATE ideas SET title=?,note=?,body=?,updated_at=? WHERE id=?`,
+		it.Title, it.Note, it.Body, now(), it.ID)
 	it.UpdatedAt = time.Now().UTC()
-	return it, err
-}
-
-// PlaceIdea sets a rating by hand — a drag. It marks the idea pinned so the UI
-// can show that this position was asserted rather than earned.
-func (s *Store) PlaceIdea(id string, rating float64) (model.Idea, error) {
-	it, err := s.Idea(id)
-	if err != nil {
-		return it, err
-	}
-	it.Rating, it.Pinned = rating, true
-	// A hand-placed rating is a weaker claim than a dueled one: widen RD so the
-	// board still knows it has not been tested here.
-	if it.RD < 90 {
-		it.RD = 90
-	}
-	_, err = s.db.Exec(`UPDATE ideas SET rating=?,rd=?,pinned=1,updated_at=? WHERE id=?`,
-		it.Rating, it.RD, now(), it.ID)
 	return it, err
 }
 
@@ -419,6 +655,111 @@ func (s *Store) DeleteIdea(id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+/* ---------------------------------- sifts ---------------------------------- */
+
+// Move is every decision there is: a sift vote (pos nil — the card lands at the
+// end of its new lane, so a session reads in the order you decided it) and a
+// drag (pos given — between its new neighbours) are the same write, logged the
+// same way, undone the same way.
+func (s *Store) Move(boardID, ideaID string, lane model.Lane, pos *float64) (model.Idea, error) {
+	it, err := s.Idea(ideaID)
+	if err != nil {
+		return it, err
+	}
+	if it.BoardID != boardID {
+		return it, errors.New("idea is not on this board")
+	}
+	if !model.ValidLane(lane) {
+		return it, fmt.Errorf("%q is not a lane; lanes are unsorted, in, maybe, unsure, out", lane)
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return it, err
+	}
+	defer tx.Rollback()
+
+	from, fromPos := it.Lane, it.Pos
+	it.Lane = lane
+	if pos != nil {
+		it.Pos = *pos
+	} else {
+		if it.Pos, err = tailPos(tx, boardID, lane); err != nil {
+			return it, err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO sifts (id,board_id,idea_id,from_lane,to_lane,from_pos,voided,created_at)
+	                      VALUES (?,?,?,?,?,?,0,?)`,
+		newID(), boardID, ideaID, string(from), string(lane), fromPos, now()); err != nil {
+		return it, err
+	}
+	if _, err := tx.Exec(`UPDATE ideas SET lane=?,pos=?,updated_at=? WHERE id=?`,
+		string(it.Lane), it.Pos, now(), it.ID); err != nil {
+		return it, err
+	}
+	it.UpdatedAt = time.Now().UTC()
+	return it, tx.Commit()
+}
+
+// UndoLast voids the most recent decision on a board and puts the card back
+// exactly where it was. It returns the restored idea so a client mid-sift can
+// show it again without reloading the world.
+func (s *Store) UndoLast(boardID string) (model.Idea, error) {
+	var id, ideaID, from string
+	var fromPos float64
+	err := s.db.QueryRow(`SELECT id,idea_id,from_lane,from_pos FROM sifts
+	                       WHERE board_id = ? AND voided = 0
+	                       ORDER BY created_at DESC, id DESC LIMIT 1`, boardID).
+		Scan(&id, &ideaID, &from, &fromPos)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Idea{}, ErrNotFound
+	}
+	if err != nil {
+		return model.Idea{}, err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return model.Idea{}, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE sifts SET voided = 1 WHERE id = ?`, id); err != nil {
+		return model.Idea{}, err
+	}
+	if _, err := tx.Exec(`UPDATE ideas SET lane=?,pos=?,updated_at=? WHERE id=?`,
+		from, fromPos, now(), ideaID); err != nil {
+		return model.Idea{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return model.Idea{}, err
+	}
+	return s.Idea(ideaID)
+}
+
+// SiftLog is the live (non-voided) decision log for a board, newest first.
+func (s *Store) SiftLog(boardID string, limit int) ([]model.Sift, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`SELECT id,board_id,idea_id,from_lane,to_lane,from_pos,created_at
+	                          FROM sifts WHERE board_id = ? AND voided = 0
+	                          ORDER BY created_at DESC, id DESC LIMIT ?`, boardID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.Sift
+	for rows.Next() {
+		var sf model.Sift
+		var from, to, created string
+		if err := rows.Scan(&sf.ID, &sf.BoardID, &sf.IdeaID, &from, &to, &sf.FromPos, &created); err != nil {
+			return nil, err
+		}
+		sf.From, sf.To, sf.CreatedAt = model.Lane(from), model.Lane(to), parseTime(created)
+		out = append(out, sf)
+	}
+	return out, rows.Err()
 }
 
 /* --------------------------------- comments -------------------------------- */
@@ -453,172 +794,28 @@ func (s *Store) Comments(ideaID string) ([]model.Comment, error) {
 	return out, rows.Err()
 }
 
-/* ---------------------------------- duels ---------------------------------- */
+/* ---------------------------------- views ---------------------------------- */
 
-// RecordDuel appends to the log and updates both ratings. The two happen in one
-// transaction so a crash can never leave a rating that no duel explains.
-func (s *Store) RecordDuel(boardID, winnerID, loserID string) (model.Duel, error) {
-	var d model.Duel
-	if winnerID == loserID {
-		return d, errors.New("an idea cannot duel itself")
-	}
-	w, err := s.Idea(winnerID)
-	if err != nil {
-		return d, err
-	}
-	l, err := s.Idea(loserID)
-	if err != nil {
-		return d, err
-	}
-	if w.BoardID != boardID || l.BoardID != boardID {
-		return d, errors.New("both ideas must be on the same board")
-	}
-
-	wp, lp := rank.Duel(
-		rank.Player{R: w.Rating, RD: w.RD, Sigma: w.Sigma},
-		rank.Player{R: l.Rating, RD: l.RD, Sigma: l.Sigma},
-	)
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return d, err
-	}
-	defer tx.Rollback()
-
-	d = model.Duel{ID: newID(), BoardID: boardID, WinnerID: winnerID, LoserID: loserID, CreatedAt: time.Now().UTC()}
-	if _, err := tx.Exec(`INSERT INTO duels (id,board_id,winner_id,loser_id,voided,created_at) VALUES (?,?,?,?,0,?)`,
-		d.ID, d.BoardID, d.WinnerID, d.LoserID, now()); err != nil {
-		return d, err
-	}
-	// A duel result overrides a hand-placement: the pin was a guess, this is evidence.
-	if _, err := tx.Exec(`UPDATE ideas SET rating=?,rd=?,sigma=?,wins=wins+1,pinned=0,updated_at=? WHERE id=?`,
-		wp.R, wp.RD, wp.Sigma, now(), winnerID); err != nil {
-		return d, err
-	}
-	if _, err := tx.Exec(`UPDATE ideas SET rating=?,rd=?,sigma=?,losses=losses+1,pinned=0,updated_at=? WHERE id=?`,
-		lp.R, lp.RD, lp.Sigma, now(), loserID); err != nil {
-		return d, err
-	}
-	return d, tx.Commit()
-}
-
-// DuelLog returns the live (non-voided) log for a board, oldest first.
-func (s *Store) DuelLog(boardID string) ([]rank.Outcome, error) {
-	rows, err := s.db.Query(`SELECT winner_id,loser_id FROM duels
-	                          WHERE board_id = ? AND voided = 0 ORDER BY created_at`, boardID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []rank.Outcome
-	for rows.Next() {
-		var o rank.Outcome
-		if err := rows.Scan(&o.WinnerID, &o.LoserID); err != nil {
-			return nil, err
-		}
-		out = append(out, o)
-	}
-	return out, rows.Err()
-}
-
-// UndoLastDuel voids the most recent duel on a board and recomputes. Cheap
-// precisely because ratings are derived: no inverse-Glicko required.
-func (s *Store) UndoLastDuel(boardID string) error {
-	var id string
-	err := s.db.QueryRow(`SELECT id FROM duels WHERE board_id = ? AND voided = 0
-	                       ORDER BY created_at DESC LIMIT 1`, boardID).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-	if _, err := s.db.Exec(`UPDATE duels SET voided = 1 WHERE id = ?`, id); err != nil {
-		return err
-	}
-	return s.Recompute(boardID)
-}
-
-// Recompute rebuilds every rating on a board from the duel log. This is the
-// function that makes the rating system replaceable and the log authoritative;
-// it also repairs any drift from a hand-placement.
-func (s *Store) Recompute(boardID string) error {
-	ideas, err := s.ListIdeas(boardID)
-	if err != nil {
-		return err
-	}
-	log, err := s.DuelLog(boardID)
-	if err != nil {
-		return err
-	}
-
-	items := make([]rank.Item, len(ideas))
-	for i, it := range ideas {
-		items[i] = rank.Item{ID: it.ID, Player: rank.NewPlayer()}
-	}
-	items = rank.Replay(items, log)
-
-	wins, losses := map[string]int{}, map[string]int{}
-	for _, o := range log {
-		wins[o.WinnerID]++
-		losses[o.LoserID]++
-	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	for _, it := range items {
-		if _, err := tx.Exec(`UPDATE ideas SET rating=?,rd=?,sigma=?,wins=?,losses=?,pinned=0 WHERE id=?`,
-			it.R, it.RD, it.Sigma, wins[it.ID], losses[it.ID], it.ID); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
-}
-
-/* --------------------------------- ranking --------------------------------- */
-
-// Live returns the ideas that are still in contention — everything outside the
-// board's terminal bucket. Buried ideas keep their row but never rank.
-func Live(b model.Board, ideas []model.Idea) []model.Idea {
+// InLane picks one lane out of an already-loaded board, order preserved.
+func InLane(ideas []model.Idea, lane model.Lane) []model.Idea {
 	out := make([]model.Idea, 0, len(ideas))
 	for _, it := range ideas {
-		if it.Bucket != b.Terminal {
+		if it.Lane == lane {
 			out = append(out, it)
 		}
 	}
 	return out
 }
 
-// Items adapts ideas to the rank package's view of them.
-func Items(ideas []model.Idea) []rank.Item {
-	out := make([]rank.Item, len(ideas))
-	for i, it := range ideas {
-		out[i] = rank.Item{ID: it.ID, Player: rank.Player{R: it.Rating, RD: it.RD, Sigma: it.Sigma}}
+// Counts is how full each lane is — the one number every caller wants next to a
+// board, because it says whether there is anything to sift.
+func Counts(ideas []model.Idea) map[model.Lane]int {
+	out := map[model.Lane]int{}
+	for _, l := range model.Lanes {
+		out[l] = 0
+	}
+	for _, it := range ideas {
+		out[it.Lane]++
 	}
 	return out
-}
-
-// Verdict answers "is this board settled?" for the given top-K.
-func (s *Store) Verdict(b model.Board, k, samples int) (rank.Verdict, error) {
-	ideas, err := s.ListIdeas(b.ID)
-	if err != nil {
-		return rank.Verdict{}, err
-	}
-	log, err := s.DuelLog(b.ID)
-	if err != nil {
-		return rank.Verdict{}, err
-	}
-	return rank.Settled(Items(Live(b, ideas)), log, k, samples, rand.New(rand.NewSource(time.Now().UnixNano()))), nil
-}
-
-func contains(ss []string, s string) bool {
-	for _, x := range ss {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }

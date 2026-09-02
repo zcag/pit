@@ -1,5 +1,5 @@
-// Command pit is an idea ranker: dump ideas in, sift them by pairwise duel,
-// and find out what to focus on — with a defensible answer to "can I stop now?".
+// Command pit is an idea sifter: dump ideas in, go through them one card at a
+// time, and come out with a short list of what you actually meant to keep.
 //
 // One binary: SQLite store, REST API, embedded web UI, and an MCP endpoint that
 // hosted assistants can connect to.

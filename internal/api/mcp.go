@@ -15,9 +15,11 @@ import (
 // shape a sibling project uses, and small enough that a dependency would cost more than it
 // saves.
 //
-// The tool surface has one deliberate hole: nothing here can write a rating.
-// Agents propose, annotate, edit and read; ranking stays the owner's, because a
-// board an agent can rank is no longer evidence of what the owner thinks.
+// The tool surface has one deliberate hole: nothing here can sift. Agents
+// propose, annotate, edit and read; the lane an idea rests in stays the owner's
+// call, because a board an agent can sort is no longer evidence of what the
+// owner thinks. An agent may push a card back to "unsorted" — that is asking
+// for a decision, not making one.
 
 const (
 	mcpProtocolVersion = "2024-11-05"
@@ -64,85 +66,86 @@ func obj(props map[string]any, required ...string) map[string]any {
 }
 func str(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 func num(desc string) map[string]any { return map[string]any{"type": "integer", "description": desc} }
+func lanemap(desc string) map[string]any {
+	return map[string]any{"type": "object", "description": desc,
+		"additionalProperties": map[string]any{"type": "string"}}
+}
 
 var mcpTools = []tool{
 	{
 		Name: "list_boards",
-		Description: "List every board with its bucket vocabulary, description, idea counts, " +
-			"and whether its ranking is settled. Start here.",
+		Description: "List every board with its lane labels and how full each lane is. " +
+			"A board with a big 'unsorted' count is one the owner still owes a sift. Start here.",
 		InputSchema: obj(nil),
 	},
 	{
-		Name:        "create_board",
-		Description: "Create a board. Buckets default to shortlist/maybe/inbox/parked/dead.",
+		Name: "create_board",
+		Description: "Create a board. Lanes are fixed for every board — unsorted (the sift queue), " +
+			"in, maybe, unsure, out — and can only be renamed for display.",
 		InputSchema: obj(map[string]any{
 			"name":        str("Display name, e.g. 'Side Projects'"),
 			"description": str("What this board is for"),
-			"buckets":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Ordered buckets, decided-most first"},
-			"terminal":    str("The graveyard bucket; must be one of buckets. Defaults to 'dead'"),
-			"intake":      str("Where new ideas land; must be one of buckets. Defaults to 'inbox'"),
+			"labels":      lanemap("Display names per lane, e.g. {\"in\":\"drafting\"}"),
 		}, "name"),
 	},
 	{
 		Name:        "update_board",
-		Description: "Edit a board's name, description, buckets or terminal bucket. Omitted fields are left alone.",
+		Description: "Edit a board's name, description or lane labels. Omitted fields are left alone.",
 		InputSchema: obj(map[string]any{
 			"board":       str("Board slug or id"),
 			"name":        str("New display name"),
 			"description": str("New description"),
-			"buckets":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"terminal":    str("New terminal bucket; must be one of buckets"),
-			"intake":      str("New intake bucket; must be one of buckets"),
+			"labels":      lanemap("Lane display names to set; an empty string resets one to its own name"),
 		}, "board"),
 	},
 	{
 		Name: "add_ideas",
 		Description: "Add one or many ideas to a board in a single atomic batch. This is the " +
-			"main way an agent contributes. Ideas land in the board's inbox unless a bucket is given.",
+			"main way an agent contributes. Ideas land unsorted, waiting for the owner to sift them.",
 		InputSchema: obj(map[string]any{
 			"board": str("Board slug or id"),
 			"ideas": map[string]any{
 				"type": "array",
 				"items": obj(map[string]any{
-					"title":  str("Short statement of the idea"),
-					"note":   str("One line saying what it is"),
-					"body":   str("The full case for it"),
-					"bucket": str("Target bucket; defaults to the board's inbox"),
+					"title": str("Short statement of the idea"),
+					"note":  str("One line saying what it is"),
+					"body":  str("The full case for it — the sift shows this, so it is what the decision is made on"),
 				}, "title"),
 			},
 		}, "board", "ideas"),
 	},
 	{
 		Name: "list_ideas",
-		Description: "List a board's ideas, best-ranked first, with rating and uncertainty (rd). " +
-			"Optionally filter by bucket or source ('me' or 'agent').",
+		Description: "List a board's ideas, best lane first, each with its lane and position. " +
+			"Optionally filter by lane (unsorted, in, maybe, unsure, out) or source ('me' or 'agent').",
 		InputSchema: obj(map[string]any{
 			"board":  str("Board slug or id"),
-			"bucket": str("Only ideas in this bucket"),
+			"lane":   str("Only ideas in this lane"),
 			"source": str("'me' or 'agent'"),
 		}, "board"),
 	},
 	{
 		Name:        "get_idea",
-		Description: "Get one idea in full: body, comment thread, rating, duel record.",
+		Description: "Get one idea in full: body, comment thread, lane, position.",
 		InputSchema: obj(map[string]any{"id": str("Idea id")}, "id"),
 	},
 	{
 		Name: "update_idea",
-		Description: "Edit an idea's title, note, body or bucket. Omitted fields are left alone. " +
-			"Ratings cannot be set — they are earned in duels by the board's owner.",
+		Description: "Edit an idea's title, note or body. Omitted fields are left alone. Lanes " +
+			"cannot be set — sifting is the owner's judgement — but an idea can be pushed back " +
+			"to 'unsorted' to ask for that judgement again.",
 		InputSchema: obj(map[string]any{
-			"id":     str("Idea id"),
-			"title":  str("New title"),
-			"note":   str("New one-line note"),
-			"body":   str("New body"),
-			"bucket": str("Move to this bucket; the terminal bucket buries it"),
+			"id":    str("Idea id"),
+			"title": str("New title"),
+			"note":  str("New one-line note"),
+			"body":  str("New body"),
+			"lane":  str("Only 'unsorted' is accepted: put this card back in the sift queue"),
 		}, "id"),
 	},
 	{
 		Name: "comment",
 		Description: "Append a note to an idea's thread. This is where an agent argues its case — " +
-			"the only channel it has for influencing a ranking.",
+			"the only channel it has for influencing where a card lands.",
 		InputSchema: obj(map[string]any{
 			"id":   str("Idea id"),
 			"text": str("The note"),
@@ -150,8 +153,8 @@ var mcpTools = []tool{
 	},
 	{
 		Name: "top",
-		Description: "The short answer: the best k ideas on a board, with a 'settled' flag saying " +
-			"whether more duels would change them. If settled is false, treat the order as provisional.",
+		Description: "The short answer: what is in the 'in' lane, in the owner's order, plus how " +
+			"much is still unsorted. A big unsorted count means this answer is provisional.",
 		InputSchema: obj(map[string]any{
 			"board": str("Board slug or id"),
 			"k":     num("How many; defaults to 5"),
@@ -247,15 +250,13 @@ func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
 			}
 			out = append(out, v)
 		}
-		return jsonText(map[string]any{"boards": out})
+		return jsonText(map[string]any{"boards": out, "lanes": model.Lanes})
 
 	case "create_board":
 		b := model.Board{
 			Name:        argStr(a, "name"),
 			Description: argStr(a, "description"),
-			Buckets:     argStrs(a, "buckets"),
-			Terminal:    argStr(a, "terminal"),
-			Intake:      argStr(a, "intake"),
+			Labels:      argLabels(a, "labels"),
 		}
 		if err := st.CreateBoard(&b); err != nil {
 			return "", err
@@ -264,8 +265,7 @@ func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
 
 	case "update_board":
 		b, err := st.UpdateBoard(argStr(a, "board"),
-			argPtr(a, "name"), argPtr(a, "description"), argStrsPtr(a, "buckets"),
-			argPtr(a, "terminal"), argPtr(a, "intake"))
+			argPtr(a, "name"), argPtr(a, "description"), argLabels(a, "labels"))
 		if err != nil {
 			return "", err
 		}
@@ -280,24 +280,19 @@ func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
 		if len(raw) == 0 {
 			return "", fmt.Errorf("ideas must be a non-empty array")
 		}
-		inbox := b.Intake
 		batch := make([]model.Idea, 0, len(raw))
 		for _, r := range raw {
 			m, _ := r.(map[string]any)
-			bucket := argStr(m, "bucket")
-			if bucket == "" {
-				bucket = inbox
-			}
 			batch = append(batch, model.Idea{
 				Title: argStr(m, "title"), Note: argStr(m, "note"), Body: argStr(m, "body"),
-				Bucket: bucket, Source: model.SourceAgent,
+				Lane: model.Unsorted, Source: model.SourceAgent,
 			})
 		}
 		out, err := st.AddIdeas(b.ID, batch)
 		if err != nil {
 			return "", err
 		}
-		return jsonText(map[string]any{"added": len(out), "ideas": out})
+		return jsonText(map[string]any{"added": len(out), "lane": model.Unsorted, "ideas": out})
 
 	case "list_ideas":
 		b, err := st.Board(argStr(a, "board"))
@@ -308,17 +303,14 @@ func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if bk := argStr(a, "bucket"); bk != "" {
-			ideas = filter(ideas, func(i model.Idea) bool { return i.Bucket == bk })
+		if l := argStr(a, "lane"); l != "" {
+			ideas = store.InLane(ideas, model.Lane(l))
 		}
 		if src := argStr(a, "source"); src != "" {
 			ideas = filter(ideas, func(i model.Idea) bool { return string(i.Source) == src })
 		}
-		v, err := st.Verdict(b, TopK, bootstrapSamples)
-		if err != nil {
-			return "", err
-		}
-		return jsonText(map[string]any{"board": b.Slug, "buckets": b.Buckets, "verdict": v, "ideas": ideas})
+		return jsonText(map[string]any{"board": b.Slug, "labels": b.Labels,
+			"counts": store.Counts(ideas), "ideas": ideas})
 
 	case "get_idea":
 		it, err := st.Idea(argStr(a, "id"))
@@ -329,11 +321,19 @@ func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
 
 	case "update_idea":
 		it, err := st.UpdateIdea(argStr(a, "id"), store.IdeaPatch{
-			Title: argPtr(a, "title"), Note: argPtr(a, "note"),
-			Body: argPtr(a, "body"), Bucket: argPtr(a, "bucket"),
+			Title: argPtr(a, "title"), Note: argPtr(a, "note"), Body: argPtr(a, "body"),
 		})
 		if err != nil {
 			return "", err
+		}
+		if l := argStr(a, "lane"); l != "" && model.Lane(l) != it.Lane {
+			if model.Lane(l) != model.Unsorted {
+				return "", fmt.Errorf("only the owner sifts: an agent may move a card to 'unsorted' " +
+					"to ask for a decision, but not into in/maybe/unsure/out. Argue for it with `comment` instead")
+			}
+			if it, err = st.Move(it.BoardID, it.ID, model.Unsorted, nil); err != nil {
+				return "", err
+			}
 		}
 		return jsonText(it)
 
@@ -357,15 +357,7 @@ func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		live := store.Live(b, ideas)
-		v, err := st.Verdict(b, k, bootstrapSamples)
-		if err != nil {
-			return "", err
-		}
-		if k > len(live) {
-			k = len(live)
-		}
-		return jsonText(map[string]any{"board": b.Slug, "verdict": v, "top": live[:k]})
+		return jsonText(topPayload(b, ideas, k))
 	}
 	return "", fmt.Errorf("unknown tool: %s", name)
 }
@@ -394,23 +386,18 @@ func argPtr(a map[string]any, k string) *string {
 	return &s
 }
 
-func argStrs(a map[string]any, k string) []string {
-	raw, _ := a[k].([]any)
-	out := make([]string, 0, len(raw))
-	for _, v := range raw {
+func argLabels(a map[string]any, k string) map[string]string {
+	raw, _ := a[k].(map[string]any)
+	if raw == nil {
+		return nil
+	}
+	out := make(map[string]string, len(raw))
+	for lane, v := range raw {
 		if s, ok := v.(string); ok {
-			out = append(out, s)
+			out[lane] = s
 		}
 	}
 	return out
-}
-
-func argStrsPtr(a map[string]any, k string) *[]string {
-	if _, ok := a[k]; !ok {
-		return nil
-	}
-	v := argStrs(a, k)
-	return &v
 }
 
 func argInt(a map[string]any, k string) int {

@@ -74,7 +74,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 
 /* The picker is also the only across-boards view there is, so each row carries
    what you would open a board to find out: what it is for, how much is live,
-   and whether its ranking can still change. */
+   and whether anything is waiting to be sifted. */
 .pop{position:absolute;top:calc(100% + 7px);left:8px;z-index:160;width:min(380px,92vw);
   background:var(--surface);border:1px solid var(--rule);border-radius:9px;box-shadow:var(--drop);
   overflow:hidden;display:flex;flex-direction:column}
@@ -87,8 +87,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 .pop-row{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;background:none;
   border:0;border-radius:6px;padding:8px 9px;cursor:pointer}
 .pop-row:hover,.pop-row.at{background:var(--sunk)}
-.pop-row .dot{width:7px;height:7px;border-radius:50%;background:var(--cold);flex:none;margin-top:5px}
-.pop-row.ok .dot{background:var(--spark)}
+.pop-row .dot{width:7px;height:7px;border-radius:50%;background:var(--spark);flex:none;margin-top:5px}
+.pop-row.clear .dot{background:var(--cold);opacity:.45}
 .pop-row .mid{min-width:0;flex:1}
 .pop-row .nm{font-size:13.5px;font-weight:500;display:flex;align-items:center;gap:7px}
 .pop-row .nm em{font-style:normal;font-family:"JetBrains Mono",monospace;font-size:9.5px;
@@ -97,6 +97,7 @@ button,input,textarea,select{font:inherit;color:inherit}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pop-row .ct{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--faint);
   flex:none;margin-top:2px;text-align:right}
+.pop-row .ct b{color:var(--spark);font-weight:700}
 .pop-empty{padding:14px 12px;font-size:12.5px;color:var(--faint);text-align:center}
 .pop-foot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--hair);padding:7px 9px}
 .pop-new{flex:1;text-align:left;background:none;border:0;border-radius:6px;padding:7px 9px;
@@ -106,43 +107,42 @@ button,input,textarea,select{font:inherit;color:inherit}
 .bdesc{font-size:12.5px;color:var(--faint);max-width:30ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
 .bdesc:hover{color:var(--muted)}
 .bar-sp{flex:1}
-.state{display:flex;align-items:center;gap:7px;font-family:"JetBrains Mono",monospace;
-  font-size:11px;color:var(--muted);white-space:nowrap;cursor:default}
-.state .dot{width:7px;height:7px;border-radius:50%;background:var(--cold);flex:none}
-.state.settled{color:var(--ink)} .state.settled .dot{background:var(--spark)}
 .stat{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);white-space:nowrap}
 .ghost{background:none;border:1px solid var(--rule);color:var(--muted);padding:6px 10px;
   border-radius:6px;cursor:pointer;font-size:12.5px;white-space:nowrap}
 .ghost:hover{color:var(--ink);border-color:var(--ink)}
 .ghost:focus-visible{outline:2px solid var(--spark);outline-offset:2px}
-.duel-btn{display:flex;align-items:center;gap:8px;flex:none;background:var(--spark);
+.go{display:flex;align-items:center;gap:8px;flex:none;background:var(--spark);
   color:var(--spark-ink);border:0;padding:8px 13px;border-radius:6px;cursor:pointer;
   font-size:13.5px;font-weight:600;letter-spacing:-.01em}
-.duel-btn:hover{filter:brightness(1.07)}
-.duel-btn[disabled]{opacity:.45;cursor:default}
-.duel-btn kbd{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:500;
+.go:hover{filter:brightness(1.07)}
+.go[disabled]{opacity:.4;cursor:default;filter:none}
+.go kbd,.go .n{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:500;
   background:color-mix(in srgb,var(--spark-ink) 15%,transparent);border-radius:3px;padding:2px 5px}
 
-.board{flex:1;min-height:0;display:grid;gap:0;overflow:hidden}
+/* ---- board: the queue, then the four lanes it drains into ---- */
+.board{flex:1;min-height:0;display:grid;gap:0;overflow:hidden;
+  grid-template-columns:.85fr 1fr 1fr 1fr .8fr}
 /* min-height:0 is load-bearing, not tidying. A grid item defaults to
    min-height:auto, so the column grows to fit its cards instead of being held
    to the row height — .col-body then has nothing to scroll against, and the
-   overflow lands below the viewport where body{overflow:hidden} clips it away.
-   The quick-add box at the column foot goes with it. */
+   overflow lands below the viewport where body{overflow:hidden} clips it away. */
 .col{min-width:0;min-height:0;display:flex;flex-direction:column;
   border-right:1px solid var(--hair);background:var(--bg);transition:background .15s}
 .col:last-child{border-right:0}
-.col.is-terminal{background:color-mix(in srgb,var(--bg) 88%,var(--sunk))}
+.col.is-queue{background:var(--sunk);border-right:1px solid var(--rule)}
+.col.is-out{background:color-mix(in srgb,var(--bg) 88%,var(--sunk))}
 .col.over{background:color-mix(in srgb,var(--spark) 11%,var(--bg))}
 .col-head{flex:none;display:flex;align-items:center;gap:8px;padding:13px 14px 9px}
 .col-name{font-family:"JetBrains Mono",monospace;font-size:10.5px;font-weight:500;
   letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.col.is-queue .col-name{color:var(--ink)}
 .col-n{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--faint)}
-.col-duel{margin-left:auto;background:none;border:0;cursor:pointer;padding:3px 6px;border-radius:4px;
+.col-sift{margin-left:auto;background:none;border:0;cursor:pointer;padding:3px 6px;border-radius:4px;
   color:var(--faint);line-height:1;font-family:"JetBrains Mono",monospace;font-size:9.5px;
   letter-spacing:.13em;text-transform:uppercase;opacity:0;transition:opacity .15s}
-.col:hover .col-duel,.col-duel:focus-visible{opacity:1}
-.col-duel:hover{color:var(--spark-ink);background:var(--spark)}
+.col:hover .col-sift,.col-sift:focus-visible{opacity:1}
+.col-sift:hover{color:var(--spark-ink);background:var(--spark)}
 .col-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;
   display:flex;flex-direction:column;gap:7px}
 .col-body::-webkit-scrollbar{width:8px}
@@ -151,8 +151,7 @@ button,input,textarea,select{font:inherit;color:inherit}
   border-radius:7px;text-align:center;line-height:1.4}
 
 /* A footer, not a card that happens to be last. Without the rule the scroll cut
-   lands flush against the input and the final card reads as broken rather than
-   scrolled. */
+   lands flush against the input and the final card reads as broken. */
 .quick{flex:none;padding:10px;border-top:1px solid var(--hair)}
 .quick input{width:100%;background:var(--card);border:1px dashed var(--rule);border-radius:7px;
   padding:9px 10px;font-size:13px;color:var(--ink)}
@@ -167,65 +166,87 @@ button,input,textarea,select{font:inherit;color:inherit}
 .card:focus-visible{outline:2px solid var(--spark);outline-offset:2px}
 .card.dragging{opacity:.35;cursor:grabbing}
 .card.sel{border-color:var(--spark);box-shadow:0 0 0 1px var(--spark)}
-.card.contested{box-shadow:inset 2px 0 0 var(--spark),var(--shadow)}
 .card .t{font-size:13.5px;font-weight:500;line-height:1.32;letter-spacing:-.005em;margin:0 0 3px}
 .card .n{font-size:11.5px;color:var(--muted);line-height:1.36;margin:0}
 .card .f{display:flex;align-items:center;gap:7px;margin-top:8px;
   font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--faint)}
 .card .src{width:5px;height:5px;border-radius:50%;background:var(--cold);flex:none}
 .card .src.agent{background:var(--spark)}
-.card .rt{margin-left:auto;white-space:nowrap}
-.card .rd{opacity:.6}
-.col.is-terminal .card{background:transparent;box-shadow:none;color:var(--dead);border-style:dashed}
-.col.is-terminal .card .n,.col.is-terminal .card .f{color:var(--dead)}
-.card .mv{position:absolute;top:8px;right:9px;font-family:"JetBrains Mono",monospace;
-  font-size:10px;font-weight:700;opacity:0;transition:opacity .3s}
-.card .mv.up{color:var(--spark);opacity:1}
-.card .mv.dn{color:var(--cold);opacity:1}
+.card .age{margin-left:auto;white-space:nowrap}
+.col.is-out .card{background:transparent;box-shadow:none;color:var(--dead);border-style:dashed}
+.col.is-out .card .n,.col.is-out .card .f{color:var(--dead)}
 .card.fresh{animation:land .55s cubic-bezier(.2,.7,.3,1)}
 @keyframes land{from{opacity:0;transform:translateY(-8px);box-shadow:0 0 0 3px var(--spark)}to{opacity:1;transform:none}}
 
-.duel{position:fixed;inset:0;z-index:120;background:var(--surface);display:flex;flex-direction:column;
+/* ---- sift: one card, four directions ---- */
+.sift{position:fixed;inset:0;z-index:120;background:var(--surface);display:flex;flex-direction:column;
   opacity:0;pointer-events:none;transition:opacity .18s}
-.duel.on{opacity:1;pointer-events:auto}
-.duel-top{flex:none;display:flex;align-items:center;gap:12px;height:52px;padding:0 14px;border-bottom:1px solid var(--hair)}
-.duel-scope{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.14em;
+.sift.on{opacity:1;pointer-events:auto}
+.sift-top{flex:none;display:flex;align-items:center;gap:12px;height:52px;padding:0 14px;border-bottom:1px solid var(--hair)}
+.sift-scope{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--faint)}
-.duel-stage{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1px 1fr}
-.side{border:0;background:none;text-align:left;cursor:pointer;
-  padding:clamp(20px,4vh,48px) clamp(22px,4vw,58px);display:flex;flex-direction:column;
-  justify-content:center;gap:13px;transition:background .16s,opacity .22s,transform .22s}
-.side:hover{background:color-mix(in srgb,var(--spark) 10%,transparent)}
-.side .src{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.13em;
+.sift-stage{flex:1;min-height:0;display:grid;gap:10px;padding:12px;
+  grid-template-columns:minmax(120px,16vw) minmax(0,1fr) minmax(120px,16vw);
+  grid-template-rows:auto minmax(0,1fr) auto}
+.zone{border:1px dashed var(--rule);background:none;border-radius:9px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  padding:10px;color:var(--muted);transition:background .14s,color .14s,border-color .14s}
+.zone:hover,.zone.armed{background:color-mix(in srgb,var(--spark) 14%,transparent);
+  border-color:var(--spark);border-style:solid;color:var(--ink)}
+.zone .key{font-family:"JetBrains Mono",monospace;font-size:15px;line-height:1}
+.zone .lbl{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.13em;
+  text-transform:uppercase}
+.zone .n{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--faint)}
+.zone.in{grid-column:2;grid-row:1;flex-direction:row;gap:10px}
+.zone.unsure{grid-column:1;grid-row:2}
+.zone.maybe{grid-column:3;grid-row:2}
+.zone.out{grid-column:2;grid-row:3;flex-direction:row;gap:10px}
+.zone.out:hover,.zone.out.armed{background:color-mix(in srgb,var(--dead) 20%,transparent);
+  border-color:var(--dead);color:var(--muted)}
+
+.sift-card{grid-column:2;grid-row:2;align-self:center;justify-self:center;
+  width:min(780px,100%);max-height:100%;overflow-y:auto;background:var(--card);
+  border:1px solid var(--hair);border-radius:11px;box-shadow:var(--lift);
+  padding:clamp(18px,3.5vh,34px) clamp(20px,4vw,44px);display:flex;flex-direction:column;gap:12px;
+  transition:transform .2s cubic-bezier(.3,.7,.3,1),opacity .2s}
+.sift-card.gone{opacity:0}
+.sift-card.to-in{transform:translateY(-40px) scale(.97)}
+.sift-card.to-out{transform:translateY(40px) scale(.97)}
+.sift-card.to-unsure{transform:translateX(-50px) scale(.97)}
+.sift-card.to-maybe{transform:translateX(50px) scale(.97)}
+.sift-card .src{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.13em;
   text-transform:uppercase;color:var(--faint)}
-.side .ttl{font-size:clamp(20px,3.1vw,36px);font-weight:600;line-height:1.14;letter-spacing:-.028em;margin:0}
-.side .note{font-size:clamp(13px,1.25vw,16px);color:var(--muted);margin:0;max-width:32ch}
-.side .body{font-size:13px;color:var(--muted);margin:0;max-width:40ch;line-height:1.5;
-  padding-left:11px;border-left:2px solid var(--hair)}
-.side .from{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--faint);margin-top:4px}
-.side.won{background:var(--spark);color:var(--spark-ink)}
-.side.won .src,.side.won .note,.side.won .from,.side.won .body{color:color-mix(in srgb,var(--spark-ink) 68%,transparent)}
-.side.lost{opacity:.2;transform:scale(.975)}
-.seam{background:var(--rule);position:relative}
-.seam::after{content:"vs";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  font-family:"Martian Mono",monospace;font-size:9px;font-weight:700;color:var(--faint);
-  background:var(--surface);padding:7px 4px}
-.duel-foot{flex:none;display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:11px 14px;
+.sift-card h2{font-size:clamp(21px,3vw,34px);font-weight:600;line-height:1.15;letter-spacing:-.028em;margin:0}
+.sift-card .note{font-size:clamp(13px,1.3vw,16px);color:var(--muted);margin:0;max-width:44ch}
+.sift-card .body{font-size:14px;color:var(--muted);margin:0;max-width:62ch;line-height:1.6;
+  white-space:pre-wrap;padding-left:12px;border-left:2px solid var(--hair)}
+.sift-card .said{margin:0;padding:9px 12px;background:var(--sunk);border-radius:7px;
+  font-size:13px;color:var(--muted);max-width:62ch}
+.sift-card .said b{color:var(--ink);font-weight:500}
+.jot{display:flex;gap:8px;align-items:center;margin:-4px 0 2px}
+.jot input{flex:1;max-width:52ch;background:none;border:0;border-bottom:1px dashed transparent;
+  padding:3px 0;font-size:clamp(13px,1.3vw,16px);color:var(--muted)}
+.jot:hover input{border-bottom-color:var(--rule)}
+.jot input:focus{outline:none;color:var(--ink);border-bottom-color:var(--spark);border-bottom-style:solid}
+.jot input::placeholder{color:var(--faint)}
+.jot span{font-family:"JetBrains Mono",monospace;font-size:9.5px;color:var(--faint);opacity:0}
+.jot:hover span,.jot input:focus + span{opacity:1}
+.sift-foot{flex:none;display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:11px 14px;
   border-top:1px solid var(--hair);font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
 .meter{flex:1;min-width:100px;height:3px;background:var(--sunk);border-radius:2px;overflow:hidden}
-.meter i{display:block;height:100%;background:var(--cold);width:0;transition:width .35s}
-.meter i.done{background:var(--spark)}
-.pill{background:var(--spark);color:var(--spark-ink);padding:2px 8px;border-radius:3px;font-weight:500}
-.duel-done{grid-column:1/-1;display:flex;flex-direction:column;justify-content:center;
+.meter i{display:block;height:100%;background:var(--spark);width:0;transition:width .3s}
+.tally{display:flex;gap:10px}
+.tally b{color:var(--ink);font-weight:700}
+.done{grid-column:1/-1;grid-row:1/-1;display:flex;flex-direction:column;justify-content:center;
   padding:clamp(24px,6vh,60px) clamp(24px,5vw,70px)}
-.duel-done h2{font-family:"Martian Mono",monospace;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.05em;margin:0 0 8px}
-.duel-done>p{color:var(--muted);margin:0 0 22px;max-width:54ch}
-.duel-done ol{margin:0 0 24px;padding:0;list-style:none;counter-reset:w;max-width:660px}
-.duel-done li{display:flex;gap:14px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--hair);
+.done h2{font-family:"Martian Mono",monospace;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.05em;margin:0 0 8px}
+.done>p{color:var(--muted);margin:0 0 22px;max-width:56ch}
+.done ol{margin:0 0 24px;padding:0;list-style:none;counter-reset:w;max-width:660px}
+.done li{display:flex;gap:14px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--hair);
   counter-increment:w;font-size:15px}
-.duel-done li::before{content:counter(w);font-family:"JetBrains Mono",monospace;font-size:11px;
+.done li::before{content:counter(w);font-family:"JetBrains Mono",monospace;font-size:11px;
   color:var(--spark);font-weight:700;width:12px;flex:none}
-.duel-done li span{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);white-space:nowrap}
+.done li span{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);white-space:nowrap}
 .done-acts{display:flex;gap:10px;flex-wrap:wrap}
 
 .scrim{position:fixed;inset:0;z-index:130;background:rgba(10,13,15,.36);opacity:0;pointer-events:none;transition:opacity .2s}
@@ -235,7 +256,7 @@ button,input,textarea,select{font:inherit;color:inherit}
   transform:translateX(102%);transition:transform .24s cubic-bezier(.2,.7,.3,1)}
 .drawer.on{transform:none}
 .dw-top{flex:none;display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--hair)}
-.bkchip{appearance:none;background:var(--sunk);border:1px solid var(--hair);border-radius:5px;padding:4px 9px;
+.lanechip{appearance:none;background:var(--sunk);border:1px solid var(--hair);border-radius:5px;padding:4px 9px;
   font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--muted);cursor:pointer}
 .srcchip{display:flex;align-items:center;gap:6px;font-family:"JetBrains Mono",monospace;font-size:10px;
@@ -294,6 +315,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .field input,.field textarea{width:100%;background:var(--card);color:var(--ink);border:1px solid var(--hair);
   border-radius:7px;padding:9px 11px;font-size:13.5px;resize:vertical}
 .field input:focus,.field textarea:focus{outline:none;border-color:var(--spark)}
+.lanes4{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .sheet-acts{display:flex;gap:9px;justify-content:flex-end;margin-top:18px}
 
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(14px);background:var(--ink);
@@ -304,7 +326,13 @@ button,input,textarea,select{font:inherit;color:inherit}
 @media (max-width:860px){
   .board{grid-template-columns:none !important;grid-auto-flow:column;grid-auto-columns:78vw;overflow-x:auto}
   .stat,.bdesc{display:none}
-  .duel-stage{grid-template-columns:none;grid-template-rows:1fr 1px 1fr}
+  /* The phone story is the sift, so it gets the whole screen: card on top,
+     the four votes as a row of thumbs underneath (or swipe the card). */
+  .sift-stage{grid-template-columns:repeat(4,1fr);grid-template-rows:minmax(0,1fr) auto;gap:8px;padding:8px}
+  .sift-card{grid-column:1/-1;grid-row:1;align-self:stretch;width:100%}
+  .zone{grid-row:2 !important;flex-direction:column !important;gap:3px;padding:9px 4px}
+  .zone.unsure{grid-column:1}.zone.out{grid-column:2}.zone.maybe{grid-column:3}.zone.in{grid-column:4}
+  .zone .key{display:none}
   .drawer{width:100vw}
 }
 @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms !important;animation-duration:.01ms !important}}
@@ -327,25 +355,25 @@ button,input,textarea,select{font:inherit;color:inherit}
   </span>
   <span class="bdesc" id="bdesc" title="Click to edit"></span>
   <span class="bar-sp"></span>
-  <span class="state" id="stateEl"></span>
   <span class="stat" id="statEl"></span>
   <button class="ghost" id="newBoardBtn" type="button">New board</button>
-  <button class="ghost" id="undoBtn" type="button" title="Void the last duel">Undo duel</button>
+  <button class="ghost" id="undoBtn" type="button" title="Put the last card back where it was">Undo</button>
   <button class="ghost" id="themeBtn" type="button">dark</button>
-  <button class="duel-btn" id="duelBtn" type="button">Duel <kbd>D</kbd></button>
+  <button class="go" id="siftBtn" type="button"><span id="siftWhat">Sift</span> <span class="n" id="siftN">0</span> <kbd>S</kbd></button>
 </div>
 
 <main class="board" id="board"></main>
 
-<div class="duel" id="duel" aria-hidden="true">
-  <div class="duel-top">
+<div class="sift" id="sift" aria-hidden="true">
+  <div class="sift-top">
     <span class="mark">pit</span>
-    <span class="duel-scope" id="duelScope"></span>
+    <span class="sift-scope" id="siftScope"></span>
     <span class="bar-sp"></span>
-    <button class="ghost" id="closeDuel" type="button">Back to board · Esc</button>
+    <button class="ghost" id="undoSift" type="button">Undo <kbd>U</kbd></button>
+    <button class="ghost" id="closeSift" type="button">Back to board · Esc</button>
   </div>
-  <div class="duel-stage" id="stage"></div>
-  <div class="duel-foot" id="duelFoot"></div>
+  <div class="sift-stage" id="stage"></div>
+  <div class="sift-foot" id="siftFoot"></div>
 </div>
 
 <div class="scrim" id="scrim"></div>
@@ -360,89 +388,76 @@ button,input,textarea,select{font:inherit;color:inherit}
 
 <script>
 (function(){
-"use strict";
+'use strict';
 
-/* ------------------------------ api ------------------------------ */
+/* ------------------------------ plumbing ------------------------------ */
 async function api(path, opts){
   const r = await fetch(path, Object.assign({headers:{'content-type':'application/json'}}, opts||{}));
-  if(r.status === 401){ location.href = '/login'; throw new Error('unauthorized'); }
-  if(r.status === 204) return null;
+  if(r.status===401){ location.href='/login'; throw new Error('signed out'); }
+  if(r.status===204) return null;
   const body = await r.json().catch(()=>null);
-  if(!r.ok) throw new Error((body && body.error) || ('HTTP '+r.status));
+  if(!r.ok) throw new Error((body&&body.error)||('http '+r.status));
   return body;
 }
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const trim = (s,n=32) => s.length>n ? s.slice(0,n-1)+'…' : s;
+function ago(iso){
+  const d = (Date.now()-new Date(iso))/1000;
+  if(d<3600) return Math.max(1,Math.round(d/60))+'m';
+  if(d<86400) return Math.round(d/3600)+'h';
+  if(d<86400*30) return Math.round(d/86400)+'d';
+  return Math.round(d/86400/30)+'mo';
+}
 
-/* ------------------------------ state ------------------------------ */
-let boards=[], B=null, ideas=[], verdict={settled:false,contested:0}, sel=null;
-let fresh=new Set(), moves={}, routing=false;
+/* Lanes are the same five on every board — a board may rename one, never add
+   one, which is what lets four keys cover the whole vocabulary. */
+const LANES = ['unsorted','in','maybe','unsure','out'];
+const VOTES = ['in','maybe','unsure','out'];
+const ARROW = {in:'↑', maybe:'→', unsure:'←', out:'↓'};
+const KEYLANE = {ArrowUp:'in', ArrowRight:'maybe', ArrowLeft:'unsure', ArrowDown:'out'};
 
 const $ = id => document.getElementById(id);
-const board=$('board'), stateEl=$('stateEl'), statEl=$('statEl'),
-      boardBtn=$('boardBtn'), boardPop=$('boardPop'), popQ=$('popQ'), popList=$('popList'),
-      bdesc=$('bdesc'), duelEl=$('duel'), stage=$('stage'), dfoot=$('duelFoot'),
-      dscope=$('duelScope'), drawer=$('drawer'), scrim=$('scrim'), sheet=$('sheet'), sheetIn=$('sheetIn');
+const board=$('board'), statEl=$('statEl'), bdesc=$('bdesc'), siftEl=$('sift'),
+      stage=$('stage'), sfoot=$('siftFoot'), sscope=$('siftScope'), drawer=$('drawer'),
+      scrim=$('scrim'), sheet=$('sheet'), sheetIn=$('sheetIn'),
+      boardBtn=$('boardBtn'), boardPop=$('boardPop'), popQ=$('popQ'), popList=$('popList');
 
-const live = () => ideas.filter(i => i.bucket !== B.terminal);
-const inCol = k => ideas.filter(i => i.bucket === k);
+let boards=[], B=null, ideas=[], sel=null, fresh=new Set(), routing=false;
+
+const label = l => (B && B.labels && B.labels[l]) || l;
+const inLane = l => ideas.filter(i => i.lane === l);
 const byId = id => ideas.find(i => i.id === id);
-const inboxOf = b => b.intake || b.buckets[0];
+const nLive = () => ideas.filter(i => i.lane !== 'out').length;
 
 async function loadBoards(){
   const r = await api('/api/boards');
-  boards = r.boards || [];
+  boards = r.boards||[];
 }
 async function loadBoard(slug){
   const r = await api('/api/boards/'+encodeURIComponent(slug)+'/ideas');
-  B = r.board; ideas = r.ideas || [];
+  B = r.board; ideas = r.ideas||[]; sel=null; fresh.clear();
   $('boardBtnName').textContent = B.name;
-  const bv = boards.find(x=>x.slug===B.slug);
-  verdict = (bv && bv.verdict) || verdict;
-  await refreshVerdict();
-}
-async function refreshVerdict(){
-  const bv = await api('/api/boards/'+encodeURIComponent(B.slug));
-  verdict = bv.verdict;
-  Object.assign(B, {name:bv.name, description:bv.description, buckets:bv.buckets, terminal:bv.terminal});
+  bdesc.textContent = B.description || 'add a description';
+  document.title = 'pit · '+B.name;
 }
 async function reload(keepFresh){
   const r = await api('/api/boards/'+encodeURIComponent(B.slug)+'/ideas');
-  ideas = r.ideas || [];
+  const prev = snapshot();
+  ideas = r.ideas||[]; B = r.board;
   if(!keepFresh) fresh.clear();
-  await refreshVerdict();
-  paint(snapshot());
+  paint(prev);
 }
 
-/* ------------------------------ contested ------------------------------ */
-/* Mirrors the server's rule: overlap with the K-th place interval. Used only
-   to mark cards, and suppressed when it would mark half the board — at that
-   point "unsettled" in the header already says it, and a stripe on everything
-   is decoration. */
-const K = 5;
-function contestedSet(){
-  const s = live().slice().sort((a,b)=>b.rating-a.rating);
-  if(s.length <= K) return new Set();
-  const kth = s[K-1], lo = kth.rating-kth.rd, hi = kth.rating+kth.rd;
-  const hits = s.filter(x => x.rating+x.rd > lo && x.rating-x.rd < hi);
-  if(hits.length > Math.max(2, Math.floor(s.length/2))) return new Set();
-  return new Set(hits.map(x=>x.id));
-}
-
-/* ------------------------------ render ------------------------------ */
-function cardHTML(x, con){
-  const mv = moves[x.id]|0;
-  return `<article class="card${fresh.has(x.id)?' fresh':''}${con?' contested':''}${sel===x.id?' sel':''}"
+/* ------------------------------ board ------------------------------ */
+function cardHTML(x){
+  return `<article class="card${fresh.has(x.id)?' fresh':''}${sel===x.id?' sel':''}"
     draggable="true" tabindex="0" data-id="${x.id}">
-    <span class="mv ${mv>0?'up':mv<0?'dn':''}">${mv>0?'▲'+mv:mv<0?'▼'+(-mv):''}</span>
     <p class="t">${esc(x.title)}</p>
     ${x.note?`<p class="n">${esc(x.note)}</p>`:''}
     <div class="f">
       <span class="src ${x.source==='agent'?'agent':''}" title="${x.source==='agent'?'from an agent':'yours'}"></span>
-      ${x.body?'<span>body</span>':''}
-      ${x.comment_count?`<span>${x.comment_count} note${x.comment_count>1?'s':''}</span>`:''}
-      ${x.pinned?'<span>placed</span>':''}
-      <span class="rt">${Math.round(x.rating)} <span class="rd">±${Math.round(x.rd)}</span></span>
+      ${x.comment_count?`<span title="${x.comment_count} note${x.comment_count===1?'':'s'}">✎${x.comment_count}</span>`:''}
+      <span class="age">${ago(x.created_at)}</span>
     </div></article>`;
 }
 function snapshot(){
@@ -451,139 +466,136 @@ function snapshot(){
 function paint(prev){
   if(!B) return;
   const scroll={}; board.querySelectorAll('.col-body').forEach(b=>scroll[b.dataset.k]=b.scrollTop);
-  const con = contestedSet();
 
-  board.style.gridTemplateColumns =
-    `repeat(${B.buckets.length-1},minmax(185px,1fr)) minmax(150px,.72fr)`;
-  board.innerHTML = B.buckets.map(k=>{
-    const g = inCol(k), term = k===B.terminal;
-    return `<section class="col${term?' is-terminal':''}" data-k="${esc(k)}">
-      <header class="col-head"><span class="col-name">${esc(k)}</span><span class="col-n">${g.length}</span>
-      ${term||g.length<2?'':`<button class="col-duel" type="button" data-scope="${esc(k)}">duel</button>`}</header>
-      <div class="col-body" data-k="${esc(k)}">
-        ${g.length ? g.map(x=>cardHTML(x,con.has(x.id))).join('')
-                   : `<div class="col-empty">${term?'Nothing buried yet.':'Drag an idea here, or add one below.'}</div>`}
+  board.style.gridTemplateColumns = '.85fr 1fr 1fr 1fr .8fr';
+  board.innerHTML = LANES.map(k=>{
+    const g = inLane(k), queue = k==='unsorted', out = k==='out';
+    return `<section class="col${queue?' is-queue':''}${out?' is-out':''}" data-k="${k}">
+      <header class="col-head"><span class="col-name">${esc(label(k))}</span><span class="col-n">${g.length}</span>
+      ${g.length&&!out?`<button class="col-sift" type="button" data-scope="${k}">sift</button>`:''}</header>
+      <div class="col-body" data-k="${k}">
+        ${g.length ? g.map(cardHTML).join('')
+                   : `<div class="col-empty">${queue?'Nothing waiting. Drop ideas here — or let an agent.'
+                       : out?'Nothing buried yet.':'Sift something in.'}</div>`}
       </div>
-      ${term?'':`<div class="quick"><input data-bucket="${esc(k)}" placeholder="Add to ${esc(k)}…" autocomplete="off"></div>`}
+      ${out?'':`<div class="quick"><input data-lane="${k}" placeholder="${queue?'Add an idea…':'Add to '+esc(label(k))+'…'}" autocomplete="off"></div>`}
     </section>`;
   }).join('');
-  board.querySelectorAll('.col-body').forEach(b=>b.scrollTop=scroll[b.dataset.k]||0);
 
-  if(prev){
+  board.querySelectorAll('.col-body').forEach(b=>{ if(scroll[b.dataset.k]) b.scrollTop=scroll[b.dataset.k]; });
+  if(prev){ // FLIP: a card that moved slides from where it was
     board.querySelectorAll('.card').forEach(c=>{
       const was=prev[c.dataset.id]; if(!was) return;
       const now=c.getBoundingClientRect(), dx=was.left-now.left, dy=was.top-now.top;
       if(!dx&&!dy) return;
-      c.style.transition='none'; c.style.transform=`translate(${dx}px,${dy}px)`;
-      requestAnimationFrame(()=>{ c.style.transition='transform .42s cubic-bezier(.2,.7,.3,1)'; c.style.transform=''; });
+      c.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:'none'}],
+                {duration:260,easing:'cubic-bezier(.2,.7,.3,1)'});
     });
   }
-
-  const n = live().length;
-  stateEl.className = 'state'+(verdict.settled?' settled':'');
-  stateEl.innerHTML = '<span class="dot"></span>'+(verdict.settled?'settled':'unsettled');
-  stateEl.title = verdict.settled
-    ? `More duels would not change the top ${K}.`
-    : `${verdict.contested} ideas still straddle the cut (agreement ${Math.round((verdict.stability||0)*100)}%).`;
-  statEl.textContent = `${n} live · ${ideas.length-n} buried`;
-  bdesc.textContent = B.description || 'add a description';
-  $('duelBtn').disabled = n < 2;
-  fresh.clear(); moves={};
+  drawStat();
+}
+function drawStat(){
+  statEl.textContent = `${nLive()} live · ${inLane('out').length} out`;
+  const s = nextScope();
+  $('siftN').textContent = s ? inLane(s).length : 0;
+  $('siftWhat').textContent = s && s!=='unsorted' ? 'Sift '+label(s) : 'Sift';
+  $('siftBtn').disabled = !s;
+  $('siftBtn').title = s ? `go through ${label(s)}, one card at a time` : 'nothing waiting';
+}
+/* What the big button sifts: the queue first, then the pile you owed a second
+   look, then the middle. Nothing left means the button has no job. */
+function nextScope(){
+  for(const l of ['unsorted','unsure','maybe']) if(inLane(l).length) return l;
+  return null;
 }
 
-/* ------------------------------ quick add ------------------------------ */
 board.addEventListener('keydown', async e=>{
   const input = e.target.closest('.quick input');
   if(input){
-    if(e.key !== 'Enter') return;
+    if(e.key!=='Enter') return;
+    e.preventDefault();
     const title = input.value.trim(); if(!title) return;
     input.value='';
     try{
       const r = await api(`/api/boards/${encodeURIComponent(B.slug)}/ideas`, {method:'POST',
-        body: JSON.stringify({ideas:[{title, bucket: input.dataset.bucket}]})});
-      (r.ideas||[]).forEach(i=>fresh.add(i.id));
+        body: JSON.stringify({ideas:[{title, lane: input.dataset.lane}]})});
+      (r.ideas||[]).forEach(x=>fresh.add(x.id));
       await reload(true);
-      const again = board.querySelector(`.quick input[data-bucket="${CSS.escape(input.dataset.bucket)}"]`);
+      const again = board.querySelector(`.quick input[data-lane="${input.dataset.lane}"]`);
       if(again) again.focus();
     }catch(err){ toast(err.message); }
     return;
   }
   const c = e.target.closest('.card');
   if(c && (e.key==='ArrowLeft'||e.key==='ArrowRight')){
-    const i = B.buckets.indexOf(c.closest('.col').dataset.k);
-    const to = e.key==='ArrowRight' ? i+1 : i-1;
-    if(to<0||to>=B.buckets.length) return;
     e.preventDefault();
-    await move(c.dataset.id, B.buckets[to]);
+    const i = LANES.indexOf(c.closest('.col').dataset.k);
+    const to = e.key==='ArrowRight' ? i+1 : i-1;
+    if(to<0||to>=LANES.length) return;
+    await move(c.dataset.id, LANES[to]);
     const again = board.querySelector(`.card[data-id="${c.dataset.id}"]`); if(again) again.focus();
   }
+  if(c && e.key==='Enter'){ e.preventDefault(); openDrawer(c.dataset.id); }
 });
 
-async function move(id, bucket){
+async function move(id, lane, pos){
+  const prev = snapshot();
+  const it = byId(id); if(!it) return;
   try{
-    await api('/api/ideas/'+id, {method:'PATCH', body: JSON.stringify({bucket})});
-    await reload();
-    toast(`“${trim(byId(id)?.title||'')}” → ${bucket}`);
+    const r = await api(`/api/ideas/${id}/place`, {method:'POST', body: JSON.stringify({lane, pos})});
+    Object.assign(it, r);
+    ideas.sort(order);
+    paint(prev);
   }catch(e){ toast(e.message); }
 }
+// Same order the server sends: best lane first, then hand position.
+const RANK = {in:0, maybe:1, unsure:2, unsorted:3, out:4};
+const order = (a,b) => (RANK[a.lane]-RANK[b.lane]) || (a.pos-b.pos) || (a.id<b.id?-1:1);
 
 /* ------------------------------ drag ------------------------------ */
 let dragId=null;
 board.addEventListener('dragstart', e=>{
   const c=e.target.closest('.card'); if(!c) return;
   dragId=c.dataset.id; c.classList.add('dragging');
-  e.dataTransfer.effectAllowed='move';
-  try{ e.dataTransfer.setData('text/plain', dragId); }catch(_){}
+  e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', dragId);
 });
 board.addEventListener('dragend', e=>{
   const c=e.target.closest('.card'); if(c) c.classList.remove('dragging');
-  board.querySelectorAll('.col.over').forEach(n=>n.classList.remove('over'));
+  board.querySelectorAll('.col.over').forEach(x=>x.classList.remove('over'));
   dragId=null;
 });
 board.addEventListener('dragover', e=>{
   const col=e.target.closest('.col'); if(!col||!dragId) return;
-  e.preventDefault(); e.dataTransfer.dropEffect='move';
-  board.querySelectorAll('.col.over').forEach(n=>{ if(n!==col) n.classList.remove('over'); });
+  e.preventDefault();
+  board.querySelectorAll('.col.over').forEach(x=>{ if(x!==col) x.classList.remove('over'); });
   col.classList.add('over');
 });
 board.addEventListener('drop', async e=>{
   const col=e.target.closest('.col'); if(!col||!dragId) return;
-  e.preventDefault();
+  e.preventDefault(); col.classList.remove('over');
   const item=byId(dragId); if(!item) return;
   const to=col.dataset.k, over=e.target.closest('.card');
-  const group=inCol(to).filter(x=>x.id!==item.id);
-
+  const group=inLane(to).filter(x=>x.id!==item.id);
   let idx=group.length;
-  if(over){
+  if(over && over.dataset.id!==item.id){
     const at=group.findIndex(x=>x.id===over.dataset.id);
     if(at>=0){ const r=over.getBoundingClientRect(); idx = e.clientY>r.top+r.height/2 ? at+1 : at; }
   }
   const above=group[idx-1], below=group[idx];
-  const rating = above&&below ? (above.rating+below.rating)/2
-               : above ? above.rating-16 : below ? below.rating+16 : item.rating;
-  const changed = item.bucket!==to;
-  try{
-    /* One call: a drag is a bucket move and a hand-placed rating at once. */
-    await api('/api/ideas/'+item.id+'/place', {method:'POST',
-      body: JSON.stringify({rating, bucket: to})});
-    await reload();
-    if(sel===item.id) openDrawer(item.id);
-    toast(changed ? `“${trim(item.title)}” → ${to}` : 'placed by hand — holds until a duel disagrees');
-  }catch(err){ toast(err.message); }
+  const pos = above&&below ? (above.pos+below.pos)/2
+            : above ? above.pos+1 : below ? below.pos-1 : 1;
+  await move(item.id, to, pos);
 });
 
 /* ------------------------------ drawer ------------------------------ */
 async function openDrawer(id){
-  let x;
-  try{ x = await api('/api/ideas/'+id); }catch(e){ return toast(e.message); }
+  const x = await api('/api/ideas/'+id);
   sel = id;
-  const pool = live().slice().sort((a,b)=>b.rating-a.rating);
-  const rank = pool.findIndex(i=>i.id===id)+1;
+  const i = ideas.findIndex(v=>v.id===id); if(i>=0) Object.assign(ideas[i], {comment_count:(x.comments||[]).length});
   const cmts = x.comments||[];
-
   drawer.innerHTML = `
   <div class="dw-top">
-    <select class="bkchip" id="dwBucket">${B.buckets.map(k=>`<option${k===x.bucket?' selected':''}>${esc(k)}</option>`).join('')}</select>
+    <select class="lanechip" id="dwLane">${LANES.map(k=>`<option value="${k}"${k===x.lane?' selected':''}>${esc(label(k))}</option>`).join('')}</select>
     <span class="srcchip ${x.source==='agent'?'agent':''}"><i></i>${x.source==='agent'?'from an agent':'yours'}</span>
     <button class="dw-x" id="dwX" type="button" aria-label="Close">×</button>
   </div>
@@ -591,13 +603,12 @@ async function openDrawer(id){
     <textarea class="dw-title" id="dwTitle" rows="1">${esc(x.title)}</textarea>
     <textarea class="dw-note" id="dwNote" rows="1" placeholder="one line — what it is">${esc(x.note)}</textarea>
     <div class="dw-stats">
-      <div><dt>rating</dt><dd>${Math.round(x.rating)} <span style="color:var(--faint)">±${Math.round(x.rd)}</span></dd></div>
-      <div><dt>rank</dt><dd>${rank>0?rank+' / '+pool.length:'buried'}</dd></div>
-      <div><dt>record</dt><dd>${x.wins}–${x.losses}</dd></div>
-      <div><dt>duels</dt><dd>${x.wins+x.losses}</dd></div>
+      <div><dt>lane</dt><dd>${esc(label(x.lane))}</dd></div>
+      <div><dt>added</dt><dd>${ago(x.created_at)} ago</dd></div>
+      <div><dt>from</dt><dd>${x.source==='agent'?'agent':'me'}</dd></div>
     </div>
     <label class="lbl" for="dwBody">Body</label>
-    <textarea class="dw-text" id="dwBody" placeholder="What is the actual idea? Agents write here too.">${esc(x.body)}</textarea>
+    <textarea class="dw-text" id="dwBody" placeholder="What is the actual idea? The sift shows this — it is what you decide on.">${esc(x.body)}</textarea>
     <label class="lbl">Notes${cmts.length?' · '+cmts.length:''}</label>
     ${cmts.length ? cmts.map(c=>`<div class="cmt"><div class="cmt-h ${c.who==='agent'?'agent':''}"><i></i><b>${c.who==='agent'?'agent':'you'}</b></div><p>${esc(c.text)}</p></div>`).join('')
       : '<p class="cmt-empty">Nothing here yet. Worth a line if there is something you would forget before you look at this again.</p>'}
@@ -607,53 +618,52 @@ async function openDrawer(id){
     </div>
   </div>
   <div class="dw-foot">
-    <button class="ghost danger" id="dwBury" type="button">${x.bucket===B.terminal?'Dig up':'Bury'}</button>
+    <button class="ghost danger" id="dwBury" type="button">${x.lane==='out'?'Dig up':'Bury'}</button>
     <button class="ghost" id="dwDel" type="button">Delete</button>
     <span class="saved" id="dwSaved">saved</span>
   </div>`;
-
-  drawer.classList.add('on'); drawer.setAttribute('aria-hidden','false'); scrim.classList.add('on');
+  drawer.classList.add('on'); drawer.setAttribute('aria-hidden','false');
+  scrim.classList.add('on'); paint(snapshot()); writeHash();
 
   const grow = el => { el.style.height='auto'; el.style.height=el.scrollHeight+'px'; };
   const T=$('dwTitle'), N=$('dwNote'), BD=$('dwBody');
-  grow(T); grow(N);
+  [T,N].forEach(el=>{ grow(el); el.addEventListener('input',()=>grow(el)); });
+  T.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); T.blur(); } });
 
-  let saveT=null, flashT=null;
+  let t=null;
   const flash = () => { const s=$('dwSaved'); if(!s) return; s.classList.add('on');
-    clearTimeout(flashT); flashT=setTimeout(()=>s.classList.remove('on'),1200); };
+    setTimeout(()=>{ const q=$('dwSaved'); if(q) q.classList.remove('on'); }, 900); };
   const save = patch => {
-    clearTimeout(saveT);
-    saveT = setTimeout(async ()=>{
-      try{ await api('/api/ideas/'+id,{method:'PATCH',body:JSON.stringify(patch)}); flash();
+    clearTimeout(t);
+    t = setTimeout(async ()=>{
+      try{ await api('/api/ideas/'+id, {method:'PATCH', body: JSON.stringify(patch)});
+           flash();
            const r=await api(`/api/boards/${encodeURIComponent(B.slug)}/ideas`); ideas=r.ideas||[]; paint(snapshot());
       }catch(e){ toast(e.message); }
-    }, 500);
+    }, 450);
   };
-  T.addEventListener('input', ()=>{ grow(T); save({title:T.value.replace(/\n/g,' ')}); });
-  N.addEventListener('input', ()=>{ grow(N); save({note:N.value.replace(/\n/g,' ')}); });
-  BD.addEventListener('input', ()=> save({body:BD.value}));
+  T.addEventListener('input', ()=>save({title:T.value.trim()}));
+  N.addEventListener('input', ()=>save({note:N.value.trim()}));
+  BD.addEventListener('input', ()=>save({body:BD.value}));
 
-  $('dwBucket').addEventListener('change', async e=>{ await move(id, e.target.value); openDrawer(id); });
+  $('dwLane').addEventListener('change', async e=>{ await move(id, e.target.value); openDrawer(id); });
   $('dwX').addEventListener('click', closeDrawer);
   $('dwBury').addEventListener('click', async ()=>{
-    const buried = x.bucket===B.terminal;
-    await move(id, buried ? inboxOf(B) : B.terminal);
-    openDrawer(id);
-    toast(buried ? 'dug up' : 'buried — it keeps its row so you stop re-having it');
+    await move(id, x.lane==='out' ? 'unsorted' : 'out'); closeDrawer();
   });
   $('dwDel').addEventListener('click', async ()=>{
+    if(!confirm('Delete this idea? Burying keeps it out of the way without losing it.')) return;
     try{ await api('/api/ideas/'+id,{method:'DELETE'}); closeDrawer(); await reload(); toast('deleted'); }
     catch(e){ toast(e.message); }
   });
   const send = async ()=>{
     const box=$('dwCmt'), v=box.value.trim(); if(!v) return;
-    try{ await api('/api/ideas/'+id+'/comments',{method:'POST',body:JSON.stringify({text:v})});
-         box.value=''; openDrawer(id); await reload(); }
+    try{ await api(`/api/ideas/${id}/comments`,{method:'POST',body:JSON.stringify({text:v})});
+         box.value=''; await openDrawer(id); }
     catch(e){ toast(e.message); }
   };
   $('dwSend').addEventListener('click', send);
-  $('dwCmt').addEventListener('keydown', e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); send(); }});
-  writeHash();
+  $('dwCmt').addEventListener('keydown', e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); send(); } });
 }
 function closeDrawer(){
   drawer.classList.remove('on'); drawer.setAttribute('aria-hidden','true');
@@ -661,105 +671,140 @@ function closeDrawer(){
 }
 scrim.addEventListener('click', closeDrawer);
 board.addEventListener('click', e=>{
-  const d=e.target.closest('.col-duel'); if(d) return openDuel(d.dataset.scope);
+  const d=e.target.closest('.col-sift'); if(d) return openSift(d.dataset.scope);
   const c=e.target.closest('.card'); if(c) openDrawer(c.dataset.id);
 });
 
-/* ------------------------------ duel ------------------------------ */
-let pair=null, locked=false, scope=null, sessionN=0, startCon=1, keepGoing=false, ranksBefore={};
+/* ------------------------------ sift ------------------------------
+   One card, four directions. The queue is client-side so a skip costs
+   nothing and the card order stays stable while you work through it. */
+let q=[], scope=null, siftFor=null, busy=false, did={in:0,maybe:0,unsure:0,out:0}, started=0;
 
-function rankMap(){
-  const m={};
-  B.buckets.forEach(k=>inCol(k).forEach((x,i)=>m[x.id]=i+1));
-  return m;
+function zoneHTML(l){
+  return `<button class="zone ${l}" type="button" data-lane="${l}">
+    <span class="key">${ARROW[l]}</span><span class="lbl">${esc(label(l))}</span>
+    <span class="n">${inLane(l).length}</span></button>`;
 }
-function sideHTML(x,i){
-  return `<button class="side" data-i="${i}">
-    <span class="src">${x.source==='agent'?'an agent suggested':'you wrote'}</span>
-    <p class="ttl">${esc(x.title)}</p>
-    ${x.note?`<p class="note">${esc(x.note)}</p>`:''}
-    ${x.body?`<p class="body">${esc(trim(x.body,200))}</p>`:''}
-    <span class="from">${esc(x.bucket)} · ${x.wins}–${x.losses} · ±${Math.round(x.rd)}</span></button>`;
-}
-function drawFoot(){
-  const left = verdict.contested||0;
-  const prog = verdict.settled ? 100 : Math.min(96, Math.max(0,(startCon-left)/startCon*100));
-  dfoot.innerHTML =
-    `<span>${sessionN} this session</span>
-     <span class="meter"><i class="${verdict.settled?'done':''}" style="width:${prog}%"></i></span>
-     ${verdict.settled?'<span class="pill">settled</span>':`<span>${left} still contest the top ${K}</span>`}
-     <span>← → pick · space skip · esc out</span>`;
-}
-async function nextPair(){
-  if(!keepGoing && verdict.settled && sessionN>0) return drawDone();
-  let r;
-  try{ r = await api(`/api/boards/${encodeURIComponent(B.slug)}/pair`+(scope?`?bucket=${encodeURIComponent(scope)}`:'')); }
-  catch(e){ return toast(e.message); }
-  if(r.exhausted || !r.a || !r.b) return drawDone();
-  verdict = r.verdict || verdict;
-  pair=[r.a,r.b];
-  stage.innerHTML = sideHTML(r.a,0)+'<div class="seam"></div>'+sideHTML(r.b,1);
-  locked=false; drawFoot();
-}
-function drawDone(){
-  const top = live().slice().sort((a,b)=>b.rating-a.rating).slice(0,K);
-  stage.innerHTML = `<div class="duel-done">
-    <h2>${verdict.settled?'Settled.':'Out of useful pairs.'}</h2>
-    <p>${verdict.settled
-      ? `${sessionN} duels. More would not change these five. Everything below them is still rough — and that is fine, you were never choosing #9.`
-      : `Every pair that would tell us something has been asked. This top ${K} is the best the evidence supports.`}</p>
-    <ol>${top.map(x=>`<li>${esc(x.title)}<span>${Math.round(x.rating)} ±${Math.round(x.rd)}</span></li>`).join('')}</ol>
-    <div class="done-acts">
-      <button class="ghost" id="doneBack" type="button">Back to board</button>
-      <button class="ghost" id="doneMore" type="button">Keep dueling anyway</button>
-    </div></div>`;
-  $('doneBack').addEventListener('click', closeDuel);
-  $('doneMore').addEventListener('click', ()=>{ keepGoing=true; nextPair(); });
+function drawCard(){
+  const x = byId(q[0]);
+  if(!x) return drawDone();
+  const said = (x.comment_count||0);
+  stage.innerHTML = VOTES.map(zoneHTML).join('') + `
+    <article class="sift-card" id="siftCard">
+      <span class="src">${x.source==='agent'?'an agent suggested':'you wrote'} · ${ago(x.created_at)} ago</span>
+      <h2>${esc(x.title)}</h2>
+      <div class="jot"><input id="jot" placeholder="one line — what it is"
+        value="${esc(x.note)}" autocomplete="off"><span>N</span></div>
+      ${x.body?`<p class="body">${esc(trim(x.body,900))}</p>`:''}
+      ${said?`<p class="said"><b>${said} note${said===1?'':'s'}</b> on this card — open it on the board to read them.</p>`:''}
+    </article>`;
   drawFoot();
 }
-async function pick(i){
-  if(locked||!pair) return;
-  const sides = stage.querySelectorAll('.side'); if(sides.length<2) return;
-  locked=true;
-  sides[i].classList.add('won'); sides[1-i].classList.add('lost');
+function drawFoot(){
+  const done = started - q.length, pct = started ? Math.round(done/started*100) : 0;
+  const tally = VOTES.filter(l=>did[l]).map(l=>`${ARROW[l]}<b>${did[l]}</b>`).join(' ');
+  sfoot.innerHTML =
+    `<span>${q.length} left</span>
+     <span class="meter"><i style="width:${pct}%"></i></span>
+     <span class="tally">${tally||'nothing yet'}</span>
+     <span>↑↓←→ vote · space skip · u undo · n note · esc out</span>`;
+}
+function drawDone(){
+  const top = inLane('in').slice(0,5);
+  const total = VOTES.reduce((n,l)=>n+did[l],0);
+  const next = ['unsorted','unsure','maybe'].find(l=>l!==scope && inLane(l).length);
+  stage.innerHTML = `<div class="done">
+    <h2>${scope==='unsorted'?'Queue clear.':'Pass done.'}</h2>
+    <p>${total
+      ? `${total} decided — ${VOTES.map(l=>`${did[l]} ${label(l)}`).join(', ')}. ${esc(label('in'))} is what you meant to keep; drag it into the order you want.`
+      : 'Nothing decided this pass.'}</p>
+    ${top.length?`<ol>${top.map(x=>`<li>${esc(x.title)}<span>${esc(label('in'))}</span></li>`).join('')}</ol>`:''}
+    <div class="done-acts">
+      <button class="ghost" id="doneBack" type="button">Back to board</button>
+      ${next?`<button class="go" id="doneNext" type="button">Sift ${esc(label(next))} <span class="n">${inLane(next).length}</span></button>`:''}
+    </div></div>`;
+  $('doneBack').addEventListener('click', closeSift);
+  if(next) $('doneNext').addEventListener('click', ()=>openSift(next));
+  drawFoot();
+}
+async function vote(lane){
+  if(busy || !q.length) return;
+  const id = q[0], card = $('siftCard');
+  busy = true;
+  if(card){ card.classList.add('to-'+lane, 'gone'); }
   try{
-    const r = await api(`/api/boards/${encodeURIComponent(B.slug)}/duels`, {method:'POST',
-      body: JSON.stringify({winner: pair[i].id, loser: pair[1-i].id})});
-    verdict = r.verdict || verdict;
-    sessionN++;
-    const res = await api(`/api/boards/${encodeURIComponent(B.slug)}/ideas`);
-    ideas = res.ideas||[];
-    const after = rankMap();
-    moves = {}; Object.keys(ranksBefore).forEach(id=>{ const d=(ranksBefore[id]||0)-(after[id]||0); if(d) moves[id]=d; });
-  }catch(e){ toast(e.message); locked=false; return; }
-  setTimeout(nextPair, 300);
+    const jot = $('jot');
+    const it = byId(id);
+    if(jot && it && jot.value.trim() !== (it.note||'')){
+      await api('/api/ideas/'+id, {method:'PATCH', body:JSON.stringify({note: jot.value.trim()})});
+      it.note = jot.value.trim();
+    }
+    const r = await api(`/api/boards/${encodeURIComponent(B.slug)}/sift`,
+      {method:'POST', body: JSON.stringify({idea:id, lane})});
+    Object.assign(byId(id)||{}, r);
+    ideas.sort(order);
+    did[lane]++; q.shift();
+  }catch(e){ toast(e.message); busy=false; if(card) card.classList.remove('to-'+lane,'gone'); return; }
+  setTimeout(()=>{ busy=false; drawCard(); }, 160);
 }
-async function openDuel(s){
-  if(live().length<2) return toast('needs at least two live ideas');
-  scope=s||null; sessionN=0; keepGoing=false;
-  await refreshVerdict();
-  startCon = Math.max(1, verdict.contested||1);
-  ranksBefore = rankMap();
-  dscope.textContent = scope ? 'inside '+scope : B.name;
-  duelEl.classList.add('on'); duelEl.setAttribute('aria-hidden','false');
-  await nextPair(); writeHash();
+function skip(){
+  if(busy || q.length<2) return;
+  q.push(q.shift()); drawCard();
+  toast('skipped — it comes back at the end of this pass');
 }
-async function closeDuel(){
-  duelEl.classList.remove('on'); duelEl.setAttribute('aria-hidden','true');
+async function undo(){
+  if(busy) return;
+  busy = true;
+  try{
+    const it = await api(`/api/boards/${encodeURIComponent(B.slug)}/sift/undo`, {method:'POST'});
+    const i = ideas.findIndex(x=>x.id===it.id);
+    // Where it sat before the undo is the vote we are taking back.
+    const undone = i>=0 ? ideas[i].lane : null;
+    if(i>=0) Object.assign(ideas[i], it); else ideas.push(it);
+    ideas.sort(order);
+    if(undone && did[undone]) did[undone]--;
+    if(siftEl.classList.contains('on')){
+      if(q[0]!==it.id) q.unshift(it.id);
+      drawCard();
+    } else { paint(snapshot()); }
+    toast(`back in ${label(it.lane)}`);
+  }catch(e){ toast(e.message==='not found' ? 'nothing to undo' : e.message); }
+  busy = false;
+}
+function openSift(l){
+  scope = l || nextScope();
+  if(!scope || !inLane(scope).length) return toast('nothing to sift');
+  q = inLane(scope).map(x=>x.id);
+  started = q.length; did = {in:0,maybe:0,unsure:0,out:0}; siftFor = B.slug;
+  sscope.textContent = 'sifting ' + label(scope);
+  siftEl.classList.add('on'); siftEl.setAttribute('aria-hidden','false');
+  drawCard(); writeHash();
+}
+async function closeSift(){
+  siftEl.classList.remove('on'); siftEl.setAttribute('aria-hidden','true');
+  const n = VOTES.reduce((a,l)=>a+did[l],0);
   await reload(); writeHash();
-  const n = Object.keys(moves).length;
-  if(sessionN) toast(`${sessionN} duels · ${n} card${n===1?'':'s'} moved`);
-  $('duelBtn').focus();
+  if(n) toast(`${n} sifted`);
+  $('siftBtn').focus();
 }
-stage.addEventListener('click', e=>{ const s=e.target.closest('.side'); if(s) pick(+s.dataset.i); });
-$('duelBtn').addEventListener('click', ()=>openDuel(null));
-$('closeDuel').addEventListener('click', closeDuel);
-
-$('undoBtn').addEventListener('click', async ()=>{
-  try{ await api(`/api/boards/${encodeURIComponent(B.slug)}/duels/undo`,{method:'POST'});
-       await reload(); toast('last duel voided and ratings recomputed'); }
-  catch(e){ toast(e.message==='not found' ? 'no duels to undo' : e.message); }
+stage.addEventListener('click', e=>{
+  const z = e.target.closest('.zone'); if(z) vote(z.dataset.lane);
 });
+$('siftBtn').addEventListener('click', ()=>openSift(null));
+$('closeSift').addEventListener('click', closeSift);
+$('undoSift').addEventListener('click', undo);
+$('undoBtn').addEventListener('click', undo);
+
+/* Swipe is the same four votes on a phone, where the zones are thumbs-width. */
+let tx=0, ty=0;
+stage.addEventListener('touchstart', e=>{ const t=e.changedTouches[0]; tx=t.clientX; ty=t.clientY; }, {passive:true});
+stage.addEventListener('touchend', e=>{
+  if(!e.target.closest('.sift-card')) return;
+  const t=e.changedTouches[0], dx=t.clientX-tx, dy=t.clientY-ty;
+  if(Math.max(Math.abs(dx),Math.abs(dy)) < 60) return;
+  const lane = Math.abs(dx)>Math.abs(dy) ? (dx>0?'maybe':'unsure') : (dy<0?'in':'out');
+  vote(lane);
+}, {passive:true});
 
 /* ------------------------------ sheets ------------------------------ */
 function openSheet(html, onOpen){
@@ -774,18 +819,15 @@ function newBoard(){
   openSheet(`<h2>New board</h2>
     <label class="field"><span>Name</span><input id="nbName" placeholder="Side projects" autofocus></label>
     <label class="field"><span>Description</span><textarea id="nbDesc" rows="2" placeholder="What is this board for?"></textarea></label>
-    <label class="field"><span>Buckets — comma separated, decided first</span>
-      <input id="nbBuckets" value="shortlist, maybe, inbox, parked, dead"></label>
+    <p class="lbl">Every board has the same lanes: unsorted → in · maybe · unsure · out. Rename them later.</p>
     <div class="sheet-acts"><button class="ghost" data-close="1" type="button">Cancel</button>
-      <button class="duel-btn" id="nbGo" type="button">Create</button></div>`, ()=>{
+      <button class="go" id="nbGo" type="button">Create</button></div>`, ()=>{
     $('nbName').focus();
     $('nbGo').addEventListener('click', async ()=>{
       const name=$('nbName').value.trim(); if(!name) return toast('a board needs a name');
-      const buckets=$('nbBuckets').value.split(',').map(s=>s.trim()).filter(Boolean);
       try{
         const b = await api('/api/boards',{method:'POST',body:JSON.stringify({
-          name, description:$('nbDesc').value.trim(), buckets,
-          terminal: buckets[buckets.length-1] })});
+          name, description:$('nbDesc').value.trim()})});
         closeSheet(); await loadBoards(); await loadBoard(b.slug); paint(null); writeHash();
         toast('board created');
       }catch(e){ toast(e.message); }
@@ -798,25 +840,29 @@ bdesc.addEventListener('click', ()=>{
   openSheet(`<h2>${esc(B.name)}</h2>
     <label class="field"><span>Description</span><textarea id="bdText" rows="3"
       placeholder="What is this board for?">${esc(B.description)}</textarea></label>
+    <span class="lbl">Lane names — blank means the lane's own name</span>
+    <div class="lanes4 field">${VOTES.concat(['unsorted']).map(l=>
+      `<input id="lb-${l}" placeholder="${l}" value="${esc((B.labels&&B.labels[l])||'')}">`).join('')}</div>
     <div class="sheet-acts"><button class="ghost" data-close="1" type="button">Cancel</button>
-      <button class="duel-btn" id="bdGo" type="button">Save</button></div>`, ()=>{
+      <button class="go" id="bdGo" type="button">Save</button></div>`, ()=>{
     $('bdText').focus();
     $('bdGo').addEventListener('click', async ()=>{
+      const labels={}; LANES.forEach(l=>{ const el=$('lb-'+l); if(el) labels[l]=el.value.trim(); });
       try{ await api('/api/boards/'+encodeURIComponent(B.slug),{method:'PATCH',
-             body:JSON.stringify({description:$('bdText').value.trim()})});
-           closeSheet(); await loadBoards(); await reload(); toast('description saved'); }
+             body:JSON.stringify({description:$('bdText').value.trim(), labels})});
+           closeSheet(); await loadBoards(); await reload(); toast('saved'); }
       catch(e){ toast(e.message); }
     });
   });
 });
 
 /* ------------------------------ routing ------------------------------
-   Every view has an address so a board, a card or a duel is a link worth
-   keeping: #/<board>, #/<board>/<ideaId>, #/<board>/duel[/<bucket>]  */
+   Every view has an address so a board, a card or a sift pass is a link worth
+   keeping: #/<board>, #/<board>/<ideaId>, #/<board>/sift[/<lane>]  */
 function writeHash(){
   if(routing || !B) return;
   let h = '#/'+B.slug;
-  if(duelEl.classList.contains('on')) h += '/duel'+(scope?'/'+scope:'');
+  if(siftEl.classList.contains('on')) h += '/sift'+(scope&&scope!=='unsorted'?'/'+scope:'');
   else if(sel) h += '/'+sel;
   if(location.hash !== h){ routing=true; history.pushState(null,'',h); routing=false; }
 }
@@ -827,35 +873,40 @@ async function readHash(){
   if(!B || B.slug!==slug) await loadBoard(slug);
   paint(null);
 
-  if(parts[1]==='duel'){ if(!duelEl.classList.contains('on')) await openDuel(parts[2]||null); return; }
-  if(duelEl.classList.contains('on')){
-    duelEl.classList.remove('on'); duelEl.setAttribute('aria-hidden','true');
+  if(parts[1]==='sift'){
+    const want = parts[2]||null;
+    if(!siftEl.classList.contains('on') || siftFor!==B.slug || (want && want!==scope)) openSift(want);
+    return;
+  }
+  if(siftEl.classList.contains('on')){
+    siftEl.classList.remove('on'); siftEl.setAttribute('aria-hidden','true');
   }
   if(parts[1] && byId(parts[1])){ if(sel!==parts[1]) await openDrawer(parts[1]); }
   else if(sel){ closeDrawer(); }
 }
 window.addEventListener('hashchange', ()=>{ if(routing) return; routing=true; readHash().finally(()=>routing=false); });
+
 /* ------------------------------ board picker ------------------------------ */
 let popAt = 0, popRows = [];
 
 function renderPop(){
-  const q = popQ.value.trim().toLowerCase();
+  const query = popQ.value.trim().toLowerCase();
   popRows = boards.filter(b =>
-    !q || b.name.toLowerCase().includes(q) || (b.description||'').toLowerCase().includes(q));
+    !query || b.name.toLowerCase().includes(query) || (b.description||'').toLowerCase().includes(query));
   if(popAt >= popRows.length) popAt = Math.max(0, popRows.length-1);
 
   popList.innerHTML = popRows.length ? popRows.map((b,i)=>{
-    const v = b.verdict||{}, here = B && b.slug===B.slug;
-    return `<button class="pop-row${v.settled?' ok':''}${i===popAt?' at':''}" role="option"
-      aria-selected="${here}" data-slug="${esc(b.slug)}" title="${v.settled
-        ?'Settled — more duels would not change the top 5'
-        :(v.contested||0)+' ideas still straddle the cut'}">
+    const c = b.counts||{}, waiting = c.unsorted||0, here = B && b.slug===B.slug;
+    const live = (b.ideas||0)-(c.out||0);
+    return `<button class="pop-row${waiting?'':' clear'}${i===popAt?' at':''}" role="option"
+      aria-selected="${here}" data-slug="${esc(b.slug)}" title="${waiting
+        ? waiting+' waiting to be sifted' : 'nothing waiting'}">
       <span class="dot"></span>
       <span class="mid">
         <span class="nm">${esc(b.name)}${here?'<em>here</em>':''}</span>
         ${b.description?`<span class="ds">${esc(b.description)}</span>`:''}
       </span>
-      <span class="ct">${b.live}${b.ideas>b.live?` <span style="opacity:.55">+${b.ideas-b.live}</span>`:''}</span>
+      <span class="ct">${waiting?`<b>${waiting}</b> to sift`:`${live} live`}</span>
     </button>`;
   }).join('') : `<div class="pop-empty">No board matches “${esc(popQ.value)}”.</div>`;
 
@@ -866,8 +917,8 @@ async function openPop(){
   boardPop.hidden = false; boardBtn.setAttribute('aria-expanded','true');
   popQ.value=''; popAt = Math.max(0, boards.findIndex(b=>B&&b.slug===B.slug));
   renderPop(); popQ.focus();
-  /* Counts and verdicts go stale while you work, and this list is where you
-     decide which board needs you — so refresh behind the open panel. */
+  /* Counts go stale while you work, and this list is where you decide which
+     board needs you — so refresh behind the open panel. */
   try{ await loadBoards(); if(!boardPop.hidden) renderPop(); }catch(_){}
 }
 function closePop(){
@@ -901,17 +952,21 @@ document.addEventListener('keydown', e=>{
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
   if(sheet.classList.contains('on')){ if(e.key==='Escape'){e.preventDefault();closeSheet();} return; }
   if(!boardPop.hidden){ if(e.key==='Escape'){ e.preventDefault(); closePop(); boardBtn.focus(); } return; }
-  if((e.key==='b'||e.key==='B') && !typing && !duelEl.classList.contains('on')
-     && !drawer.classList.contains('on')){ e.preventDefault(); openPop(); return; }
-  if(duelEl.classList.contains('on')){
-    if(e.key==='Escape'){ e.preventDefault(); closeDuel(); }
-    else if(e.key==='ArrowLeft'){ e.preventDefault(); pick(0); }
-    else if(e.key==='ArrowRight'){ e.preventDefault(); pick(1); }
-    else if(e.key===' '){ e.preventDefault(); if(!locked) nextPair(); }
+
+  if(siftEl.classList.contains('on')){
+    if(e.key==='Escape'){ e.preventDefault(); if(typing){ document.activeElement.blur(); return; } closeSift(); return; }
+    if(typing){ if(e.key==='Enter'){ e.preventDefault(); document.activeElement.blur(); } return; }
+    if(KEYLANE[e.key]){ e.preventDefault(); vote(KEYLANE[e.key]); }
+    else if(e.key===' '){ e.preventDefault(); skip(); }
+    else if(e.key==='u'||e.key==='U'||e.key==='Backspace'){ e.preventDefault(); undo(); }
+    else if(e.key==='n'||e.key==='N'){ const j=$('jot'); if(j){ e.preventDefault(); j.focus(); j.select(); } }
     return;
   }
   if(drawer.classList.contains('on')){ if(e.key==='Escape'){ e.preventDefault(); document.activeElement.blur(); closeDrawer(); } return; }
-  if((e.key==='d'||e.key==='D') && !typing){ e.preventDefault(); openDuel(null); }
+  if(typing) return;
+  if(e.key==='b'||e.key==='B'){ e.preventDefault(); openPop(); }
+  else if(e.key==='s'||e.key==='S'){ e.preventDefault(); openSift(null); }
+  else if(e.key==='u'||e.key==='U'){ e.preventDefault(); undo(); }
 });
 
 let tt=null;

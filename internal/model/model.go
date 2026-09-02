@@ -1,16 +1,16 @@
 // Package model holds pit's domain types.
 //
-// The load-bearing decision: a Duel is the record of truth and a rating is a
-// derived view of the duel log. Ratings live on Idea for cheap reads, but they
-// can always be recomputed from scratch, so changing the rating system is a
-// recompute rather than a migration.
+// The load-bearing decision: lanes are a fixed spine, not a vocabulary. Every
+// board has the same five states, because the sift has exactly four keys and a
+// queue to draw from — a bucket you cannot vote into is a bucket that fills up
+// and never empties. Boards may rename a lane; they may not invent one.
 package model
 
 import "time"
 
 // Source records who put an idea on the board. Agents may propose, annotate and
-// edit; only a human may produce a duel, so ratings stay evidence of what the
-// owner thinks rather than what a model guessed.
+// edit; only a human may sift, so a lane stays evidence of what the owner
+// thinks rather than what a model guessed.
 type Source string
 
 const (
@@ -18,71 +18,66 @@ const (
 	SourceAgent Source = "agent"
 )
 
-// Board is one pile of ideas with its own vocabulary of buckets.
-type Board struct {
-	ID          string    `json:"id"`
-	Slug        string    `json:"slug"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	// Buckets is the ordered bucket vocabulary, decided-most first. The default
-	// set ships with every board; a board may override it (a reading list wants
-	// "drafting" where a project board wants "doing").
-	Buckets []string `json:"buckets"`
-	// Intake is where a new idea lands when the caller does not say. It cannot be
-	// derived from position: in the default vocabulary the second-from-last
-	// bucket is "parked", which would quietly file every pushed idea as already
-	// considered-and-deferred.
-	Intake string `json:"intake"`
-	// Terminal is the graveyard bucket. Ideas there are buried, never deleted —
-	// a killed idea is what stops you having it again, so it keeps earning its
-	// row in the dedupe index.
-	Terminal  string    `json:"terminal"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-// DefaultBuckets is the zero-setup vocabulary for a new board.
-var DefaultBuckets = []string{"shortlist", "maybe", "inbox", "parked", "dead"}
+// Lane is where an idea rests. Unsorted is the queue the sift draws from;
+// the other four are the four votes.
+type Lane string
 
 const (
-	DefaultTerminal = "dead"
-	DefaultIntake   = "inbox"
+	Unsorted Lane = "unsorted" // not yet looked at — the sift queue
+	In       Lane = "in"       // yes
+	Maybe    Lane = "maybe"    // a real idea, second tier
+	Unsure   Lane = "unsure"   // looked at it, could not call it — owed a second pass
+	Out      Lane = "out"      // no; buried, never deleted
 )
 
-// ResolveIntake picks a landing bucket for a custom vocabulary: the one named
-// "inbox" if there is one, else the last bucket that is not the graveyard.
-func ResolveIntake(buckets []string, terminal string) string {
-	for _, b := range buckets {
-		if b == DefaultIntake {
-			return b
+// Lanes is every lane in board order, queue first.
+var Lanes = []Lane{Unsorted, In, Maybe, Unsure, Out}
+
+// Votes is what a sift can put a card into — Lanes minus the queue itself.
+var Votes = []Lane{In, Maybe, Unsure, Out}
+
+func ValidLane(l Lane) bool {
+	for _, x := range Lanes {
+		if x == l {
+			return true
 		}
 	}
-	for i := len(buckets) - 1; i >= 0; i-- {
-		if buckets[i] != terminal {
-			return buckets[i]
-		}
-	}
-	return terminal
+	return false
 }
 
-// Idea is one card. Rating/RD/Sigma are Glicko-2 state, derived from Duels.
+// Board is one pile of ideas.
+type Board struct {
+	ID          string `json:"id"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	// Labels renames lanes for display. A writing board calls "in" drafting; the
+	// lane is still "in", so the sift, the API and every agent keep one
+	// vocabulary. Missing key means the lane's own name.
+	Labels    map[string]string `json:"labels"`
+	CreatedAt time.Time         `json:"created_at"`
+	UpdatedAt time.Time         `json:"updated_at"`
+}
+
+func (b Board) Label(l Lane) string {
+	if s, ok := b.Labels[string(l)]; ok && s != "" {
+		return s
+	}
+	return string(l)
+}
+
+// Idea is one card. Pos orders it within its lane, ascending: an idea sifted
+// later lands below one sifted earlier, and a drag writes a value between its
+// new neighbours.
 type Idea struct {
-	ID      string `json:"id"`
-	BoardID string `json:"board_id"`
-	Title   string `json:"title"`
-	Note    string `json:"note"`
-	Body    string `json:"body"`
-	Bucket  string `json:"bucket"`
-	Source  Source `json:"source"`
-
-	Rating float64 `json:"rating"`
-	RD     float64 `json:"rd"`
-	Sigma  float64 `json:"sigma"`
-	Wins   int     `json:"wins"`
-	Losses int     `json:"losses"`
-
-	// Pinned marks a rating set by hand (a drag) rather than earned in a duel.
-	Pinned bool `json:"pinned"`
+	ID      string  `json:"id"`
+	BoardID string  `json:"board_id"`
+	Title   string  `json:"title"`
+	Note    string  `json:"note"`
+	Body    string  `json:"body"`
+	Lane    Lane    `json:"lane"`
+	Source  Source  `json:"source"`
+	Pos     float64 `json:"pos"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -94,10 +89,8 @@ type Idea struct {
 	CommentCount int `json:"comment_count"`
 }
 
-func (i Idea) Duels() int { return i.Wins + i.Losses }
-
 // Comment is a note on an idea. Agents write here to argue their case, which is
-// the only channel they have for influencing a ranking.
+// the only channel they have for influencing where a card lands.
 type Comment struct {
 	ID        string    `json:"id"`
 	IdeaID    string    `json:"idea_id"`
@@ -106,13 +99,16 @@ type Comment struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// Duel is one comparison. Append-only: an undo writes Voided rather than
-// deleting the row, so the log stays a faithful record of what was asked.
-type Duel struct {
+// Sift is one decision: a vote, or a drag. Append-only — an undo writes Voided
+// and restores From/FromPos, so the log stays a faithful record of what was
+// actually decided and undo is a one-row write.
+type Sift struct {
 	ID        string    `json:"id"`
 	BoardID   string    `json:"board_id"`
-	WinnerID  string    `json:"winner_id"`
-	LoserID   string    `json:"loser_id"`
+	IdeaID    string    `json:"idea_id"`
+	From      Lane      `json:"from"`
+	To        Lane      `json:"to"`
+	FromPos   float64   `json:"from_pos"`
 	Voided    bool      `json:"voided"`
 	CreatedAt time.Time `json:"created_at"`
 }

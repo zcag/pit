@@ -1,59 +1,86 @@
 # pit
 
-An idea ranker. Dump ideas in, sift them by pairwise duel, find out what to
-focus on — and get a defensible answer to *can I stop now?*
+An idea sifter. Dump ideas in, go through them one card at a time, and come out
+with a short list of what you actually meant to keep.
 
-You pit ideas against each other. It is also the hole you dump them into.
+You pit ideas against your own judgement. It is also the hole you dump them into.
 
 <https://pit.example.com>
 
 ## Why it is not a kanban board
 
-A board gives you buckets and no order, so you end up with sixty cards in
-"backlog" and still no idea what to do. The hard half is the sifting.
+A board gives you buckets and no verdict, so you end up with sixty cards in
+"backlog" and still no idea what to do. The hard half is deciding, and deciding
+is easy per card and impossible in bulk — forty cards on a screen is a wall you
+stare at; one card in the middle of the screen is a question you answer.
 
-**Pairwise duels** are the mechanic: *A or B?* You never hold forty ideas in your
-head, only two. Glicko-2 over the answers gives a real order, and — because
-Glicko-2 carries an uncertainty per idea — a principled reason to stop.
+**The sift** is the mechanic. One idea, full screen, four keys:
 
-Two axes that compose:
+```
+              ↑  in        yes
+   ←  unsure                       →  maybe
+              ↓  out       no
 
-- **Buckets** are the decided state: `shortlist → maybe → inbox → parked → dead`
-  (per board; a writing board wants `drafting` where a project board wants `doing`)
-- **Duels** rank *within* the board, and the board updates live as you go
+     space  skip — ask me again later this pass
+     u      undo the last call
+     n      fix the one-liner while it is in front of you
+```
 
-## When the duel ends
+Twenty ideas takes about a minute. `unsure` is not a failure state — it is the
+honest answer often enough to deserve a key, and it leaves you a pile you can
+sift again later instead of a decision you faked.
 
-Sorting everything is the wrong target. Nobody needs #9 against #10, and a full
-noisy sort costs more comparisons than anyone will sit through. The target is
-the **top 5 as a set**, and the stopping rule is: *if I had asked slightly
-different questions, would I have landed on the same five?*
+## Lanes are fixed
 
-- **Stability** — the duel log is resampled with replacement, ratings recomputed
-  from scratch each time, and we count how often the top 5 comes out the same.
-  95% agreement and the board is **settled**.
-- **Contested** — the ideas whose uncertainty still straddles the cut line.
-  Everything else is safely in or safely out; asking about it is a wasted click.
-- **Adaptive pairing** — the server picks pairs that are close, uncertain, and
-  near the boundary. Asking whether #1 beats #12 teaches nothing.
+Every board has the same five lanes, and only their display names change:
 
-A board also goes unsettled on its own when new ideas arrive, because a new
-idea has maximum uncertainty by definition. So pit is never "done" — it is
-*settled until something changes*.
+| | |
+|---|---|
+| `unsorted` | the queue the sift draws from; where everything lands |
+| `in` | yes |
+| `maybe` | a real idea, second tier |
+| `unsure` | you looked and could not call it — owed a second pass |
+| `out` | no. Buried, never deleted — a killed idea is what stops you having it again |
 
-## The duel log is the truth
+This used to be a per-board vocabulary of arbitrary length. It isn't any more,
+because a lane you cannot vote into is a lane that fills up and never empties:
+four keys, four lanes, plus the queue. A board renames one — a writing board
+calls `in` *drafting* — and the sift, the API and every agent still speak one
+vocabulary.
 
-Ratings on an idea are a cache. `Recompute` rebuilds every one of them from the
-append-only duel log, which is what makes the rating system swappable without a
-migration, and what makes undo a one-row write (`voided = 1`, then recompute)
-rather than an inverse-Glicko problem.
+Order *within* a lane is yours: drag a card and it goes where you put it. There
+is no computed ranking any more (see below), so `in` in the order you dragged it
+is the answer.
+
+## The log is the truth
+
+Every vote and every drag appends to `sifts` — from lane, to lane, and the
+position it left. Nothing is ever overwritten in place, which makes undo a
+one-row write (`voided = 1`, put the card back) rather than a guess, and lets
+`u` walk back a whole pass one card at a time.
+
+## The duel is shelved
+
+pit used to rank by pairwise duel with Glicko-2 and a bootstrap stopping rule.
+It was good at the last mile and useless at the first: 40 ideas needs ~100
+comparisons, and the real boards sat at zero duels forever because nobody starts
+a hundred-question quiz on a pile that is 60% junk. The sift answers the
+question the duels were being asked to answer, in a minute.
+
+So it is off, not deleted. `internal/rank` (Glicko-2, adaptive pairing,
+stability) is intact and still tested, the `duels` table and its rows survive
+the migration, and the git history has the store and UI wiring. If ordering the
+`in` lane by hand ever stops being enough, it comes back — for the five cards it
+was always meant for, not for the whole dump.
 
 ## Agents
 
-Agents propose, annotate, edit and read. **Agents cannot write a rating** —
-there is deliberately no tool for it. A rating is the record of a judgement you
-made; if an agent could set one, the board would stop being evidence of what
-*you* think, which is the only thing it is for.
+Agents propose, annotate, edit and read. **Agents cannot sift** — there is
+deliberately no tool for it, and `update_idea` will refuse any lane but
+`unsorted`. Which lane a card rests in is the record of a judgement you made; if
+an agent could set one, the board would stop being evidence of what *you* think,
+which is the only thing it is for. Pushing a card back to `unsorted` is allowed:
+that is asking for a decision, not making one.
 
 Connect from Claude Code:
 
@@ -68,45 +95,48 @@ serves RFC 9728 Protected Resource Metadata so the host can discover it.
 
 | Tool | |
 |---|---|
-| `list_boards` | boards, buckets, descriptions, and whether each is settled |
-| `create_board` / `update_board` | including the description and bucket vocabulary |
+| `list_boards` | boards, lane labels, and how full each lane is |
+| `create_board` / `update_board` | including the description and lane labels |
 | `add_ideas` | bulk, atomic; the main way an agent contributes |
-| `list_ideas` | ranked, with rating and uncertainty; filter by bucket or source |
-| `get_idea` | body, comment thread, duel record |
-| `update_idea` | title, note, body, bucket — never the rating |
+| `list_ideas` | best lane first, with lane and position; filter by lane or source |
+| `get_idea` | body, comment thread, lane |
+| `update_idea` | title, note, body — and `unsorted` as the only lane it may set |
 | `comment` | where an agent argues its case |
-| `top` | the short answer, with the settled flag |
+| `top` | the `in` lane, plus how much is still unsorted |
 
 ## REST
 
 Everything the UI does. `Authorization: Bearer <key>`, or the session cookie.
 
 ```
-GET    /api/boards                        list, each with its verdict
+GET    /api/boards                        list, each with its lane counts
 POST   /api/boards                        create
-GET    /api/boards/{board}                one board + verdict
-PATCH  /api/boards/{board}                name, description, buckets, terminal, intake
+GET    /api/boards/{board}                one board + counts
+PATCH  /api/boards/{board}                name, description, labels
 DELETE /api/boards/{board}
 
-GET    /api/boards/{board}/ideas          ranked
+GET    /api/boards/{board}/ideas          best lane first; ?lane= ?source=
 POST   /api/boards/{board}/ideas          bulk add
 GET    /api/boards/{board}/top?k=5        the short answer
-GET    /api/boards/{board}/pair[?bucket=] the next duel worth asking
-POST   /api/boards/{board}/duels          {winner, loser}
-POST   /api/boards/{board}/duels/undo     void the last duel, recompute
+POST   /api/boards/{board}/sift           {idea, lane} — one vote
+POST   /api/boards/{board}/sift/undo      void the last call, restore the card
+GET    /api/boards/{board}/log?n=50       what you decided, newest first
 
 GET    /api/ideas/{id}
-PATCH  /api/ideas/{id}                    title, note, body, bucket
+PATCH  /api/ideas/{id}                    title, note, body, lane
 DELETE /api/ideas/{id}
-POST   /api/ideas/{id}/place              {rating, bucket} — a drag; UI only
+POST   /api/ideas/{id}/place              {lane, pos} — a drag
 POST   /api/ideas/{id}/comments
 ```
 
 ## UI
 
-Vertical buckets, drag between them, click a card for body and notes. `D` opens
-the fullscreen duel, `Esc` leaves it, `←`/`→` pick. Every view has an address:
-`#/<board>`, `#/<board>/<ideaId>`, `#/<board>/duel[/<bucket>]`.
+The queue, then the four lanes it drains into. `S` opens the sift, `Esc` leaves
+it, arrows vote, `space` skips, `U` undoes anywhere. Drag to reorder within a
+lane or to move between them; a column's `sift` button re-sifts just that lane,
+which is how the `unsure` pile gets a second pass. On a phone the sift is the
+whole screen and the four votes are swipes. Every view has an address:
+`#/<board>`, `#/<board>/<ideaId>`, `#/<board>/sift[/<lane>]`.
 
 ## Running it
 
@@ -130,16 +160,21 @@ Config is env-only:
 
 Issuer and resource both unset ⇒ OAuth off, `/mcp` stays API-key-only.
 
+Opening a pre-lanes database migrates it in place: buckets map onto lanes
+(`shortlist`→`in`, `parked`→`unsure`, the intake bucket→`unsorted`, the terminal
+one→`out`), a custom bucket name survives as that lane's label, and the Glicko
+order becomes the hand order of the new board. It is a table rebuild — take a
+copy of the file first.
+
 ## Known gaps
 
-- **No sweep mode yet.** 40 ideas needs ~100 duels; sweep the junk first and 12
-  ideas needs ~25, so a keyboard triage pass is what makes the duel finishable
-  on a big dump. It is the next thing to build.
 - **No dedupe on insert.** Agents re-propose the same idea constantly; embedding
-  each new idea and matching it against live *and* buried ones is the fix.
-- **Drag is desktop-only** (native HTML5 DnD). The phone story is the duel view.
-- **A hand-placed rating loses to the next duel.** Whether dragging should
-  instead *pin* an idea out of the pairing pool is an open call.
+  each new idea and matching it against live *and* buried ones is the fix, and
+  it matters more now that the queue is the front door.
+- **Drag is desktop-only** (native HTML5 DnD). The phone story is the sift.
+- **A skip is session-only.** Skipping rotates the card to the back of this
+  pass; reopen the sift and it is in the queue again, unmarked. If "I keep
+  skipping this one" turns out to be a signal, it needs a counter.
 - **A no-argument tool must still emit `"properties": {}`.** In Go a nil map
   marshals to `null`, and one invalid schema makes a strict client reject the
   *entire* tools/list — every tool vanishes because of the one that takes no
