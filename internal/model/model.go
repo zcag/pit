@@ -88,6 +88,10 @@ type Idea struct {
 	UpdatedAt time.Time `json:"updated_at"`
 
 	Comments []Comment `json:"comments,omitempty"`
+	// CommentCount is populated on list responses, where loading whole threads
+	// for every card would be wasteful but the card still needs to show there
+	// is something to read.
+	CommentCount int `json:"comment_count"`
 }
 
 func (i Idea) Duels() int { return i.Wins + i.Losses }

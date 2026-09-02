@@ -261,3 +261,33 @@ func TestSlugify(t *testing.T) {
 		}
 	}
 }
+
+// A card needs to show that a thread exists without paying to load it, so the
+// list path carries a count. Regression: it did not, so the indicator in the UI
+// could never appear.
+func TestListIdeasCarriesCommentCounts(t *testing.T) {
+	s := open(t)
+	b := board(t, s)
+	its := add(t, s, b, "with", "without")
+	s.AddComment(its[0].ID, model.SourceAgent, "one")
+	s.AddComment(its[0].ID, model.SourceHuman, "two")
+
+	got, err := s.ListIdeas(b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]model.Idea{}
+	for _, i := range got {
+		byID[i.ID] = i
+	}
+	if n := byID[its[0].ID].CommentCount; n != 2 {
+		t.Errorf("commented idea count = %d, want 2", n)
+	}
+	if n := byID[its[1].ID].CommentCount; n != 0 {
+		t.Errorf("uncommented idea count = %d, want 0", n)
+	}
+	// The list must not haul whole threads along with it.
+	if len(byID[its[0].ID].Comments) != 0 {
+		t.Error("list response carried full comment bodies")
+	}
+}

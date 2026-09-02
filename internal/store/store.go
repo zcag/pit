@@ -296,6 +296,37 @@ func (s *Store) ListIdeas(boardID string) ([]model.Idea, error) {
 		}
 		out = append(out, it)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// One extra query for the whole board rather than one per card.
+	counts, err := s.commentCounts(boardID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].CommentCount = counts[out[i].ID]
+	}
+	return out, nil
+}
+
+func (s *Store) commentCounts(boardID string) (map[string]int, error) {
+	rows, err := s.db.Query(`SELECT c.idea_id, COUNT(*) FROM comments c
+	                          JOIN ideas i ON i.id = c.idea_id
+	                          WHERE i.board_id = ? GROUP BY c.idea_id`, boardID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
 	return out, rows.Err()
 }
 
@@ -311,6 +342,7 @@ func (s *Store) Idea(id string) (model.Idea, error) {
 		return it, err
 	}
 	it.Comments, err = s.Comments(id)
+	it.CommentCount = len(it.Comments)
 	return it, err
 }
 

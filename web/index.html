@@ -419,7 +419,7 @@ function cardHTML(x, con){
     <div class="f">
       <span class="src ${x.source==='agent'?'agent':''}" title="${x.source==='agent'?'from an agent':'yours'}"></span>
       ${x.body?'<span>body</span>':''}
-      ${x.comments&&x.comments.length?`<span>${x.comments.length}</span>`:''}
+      ${x.comment_count?`<span>${x.comment_count} note${x.comment_count>1?'s':''}</span>`:''}
       ${x.pinned?'<span>placed</span>':''}
       <span class="rt">${Math.round(x.rating)} <span class="rd">±${Math.round(x.rd)}</span></span>
     </div></article>`;
