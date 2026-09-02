@@ -110,9 +110,14 @@ button,input,textarea,select{font:inherit;color:inherit}
 .duel-btn kbd{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:500;
   background:color-mix(in srgb,var(--spark-ink) 15%,transparent);border-radius:3px;padding:2px 5px}
 
-.board{flex:1;min-height:0;display:grid;gap:0}
-.col{min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--hair);
-  background:var(--bg);transition:background .15s}
+.board{flex:1;min-height:0;display:grid;gap:0;overflow:hidden}
+/* min-height:0 is load-bearing, not tidying. A grid item defaults to
+   min-height:auto, so the column grows to fit its cards instead of being held
+   to the row height — .col-body then has nothing to scroll against, and the
+   overflow lands below the viewport where body{overflow:hidden} clips it away.
+   The quick-add box at the column foot goes with it. */
+.col{min-width:0;min-height:0;display:flex;flex-direction:column;
+  border-right:1px solid var(--hair);background:var(--bg);transition:background .15s}
 .col:last-child{border-right:0}
 .col.is-terminal{background:color-mix(in srgb,var(--bg) 88%,var(--sunk))}
 .col.over{background:color-mix(in srgb,var(--spark) 11%,var(--bg))}
