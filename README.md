@@ -143,7 +143,10 @@ neither asks you to scroll. The two card edges behind it are the rest of the
 queue, and they thin out as you go. Drag to reorder within a
 lane or to move between them; a column's `sift` button re-sifts just that lane,
 which is how the `unsure` pile gets a second pass. On a phone the sift is the
-whole screen and the four votes are swipes. Every view has an address:
+whole screen and the four votes are swipes. Clicking the description opens the
+board itself — its name, its lane labels, and the one destructive button in the
+app: deleting a board takes every idea on it and asks twice, naming the count.
+Every view has an address:
 `#/<board>`, `#/<board>/<ideaId>`, `#/<board>/sift[/<lane>]`.
 
 ## Running it

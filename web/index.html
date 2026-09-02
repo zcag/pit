@@ -186,8 +186,12 @@ button,input,textarea,select{font:inherit;color:inherit}
   transition:opacity .2s ease,transform .2s cubic-bezier(.2,.7,.3,1)}
 .sift.on{opacity:1;pointer-events:auto;transform:none}
 .sift-top{flex:none;display:flex;align-items:center;gap:12px;height:52px;padding:0 14px;border-bottom:1px solid var(--hair)}
+.sift-board{padding-left:11px;border-left:1px solid var(--rule);font-size:13.5px;font-weight:500;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:22ch}
 .sift-scope{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--faint)}
+  text-transform:uppercase;color:var(--faint);padding-left:11px;border-left:1px solid var(--rule)}
+.bdesc.static{cursor:default}
+.bdesc.static:hover{color:var(--faint)}
 .sift-stage{flex:1;min-height:0;display:grid;gap:10px;padding:12px;
   grid-template-columns:minmax(140px,18vw) minmax(0,1fr) minmax(140px,18vw);
   grid-template-rows:auto minmax(0,1fr) auto}
@@ -352,6 +356,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .composer textarea:focus{outline:none;border-color:var(--rule)}
 .dw-foot{flex:none;display:flex;gap:9px;align-items:center;padding:11px 14px;border-top:1px solid var(--hair)}
 .danger:hover{color:var(--spark-ink);background:var(--spark);border-color:var(--spark)}
+.ghost.armed{color:var(--spark-ink);background:var(--spark);border-color:var(--spark);font-weight:600}
 .saved{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--faint);
   opacity:0;transition:opacity .2s}
 .saved.on{opacity:1}
@@ -370,7 +375,8 @@ button,input,textarea,select{font:inherit;color:inherit}
   border-radius:7px;padding:9px 11px;font-size:13.5px;resize:vertical}
 .field input:focus,.field textarea:focus{outline:none;border-color:var(--spark)}
 .lanes4{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.sheet-acts{display:flex;gap:9px;justify-content:flex-end;margin-top:18px}
+.sheet-acts{display:flex;gap:9px;align-items:center;justify-content:flex-end;margin-top:18px}
+.sheet-acts .danger{margin-right:auto}
 
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(14px);background:var(--ink);
   color:var(--bg);border-radius:7px;padding:9px 15px;font-size:12.5px;box-shadow:var(--lift);
@@ -430,6 +436,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 <div class="sift" id="sift" aria-hidden="true">
   <div class="sift-top">
     <span class="mark">pit</span>
+    <span class="sift-board" id="siftBoard"></span>
+    <span class="bdesc static" id="siftDesc"></span>
     <span class="sift-scope" id="siftScope"></span>
     <span class="bar-sp"></span>
     <button class="ghost" id="undoSift" type="button">Undo <kbd>U</kbd></button>
@@ -948,6 +956,8 @@ function openSift(l){
   started = q.length; did = {in:0,maybe:0,unsure:0,out:0}; siftFor = B.slug;
   justVoted = null; lastLane = null; enterFrom = null;
   sscope.textContent = 'sifting ' + label(scope);
+  $('siftBoard').textContent = B.name;
+  $('siftDesc').textContent = B.description || '';
   closePop();                       // it sits above the overlay otherwise
   siftEl.classList.add('on'); siftEl.setAttribute('aria-hidden','false');
   drawCard(); writeHash();
@@ -1008,25 +1018,52 @@ function newBoard(){
 }
 $('newBoardBtn').addEventListener('click', newBoard);
 
-bdesc.addEventListener('click', ()=>{
-  openSheet(`<h2>${esc(B.name)}</h2>
+function editBoard(){
+  const bv = boards.find(x=>x.slug===B.slug) || {ideas:0};
+  openSheet(`<h2>Board</h2>
+    <label class="field"><span>Name</span><input id="bdName" value="${esc(B.name)}"></label>
     <label class="field"><span>Description</span><textarea id="bdText" rows="3"
       placeholder="What is this board for?">${esc(B.description)}</textarea></label>
     <span class="lbl">Lane names — blank means the lane's own name</span>
-    <div class="lanes4 field">${VOTES.concat(['unsorted']).map(l=>
+    <div class="lanes4 field">${LANES.map(l=>
       `<input id="lb-${l}" placeholder="${l}" value="${esc((B.labels&&B.labels[l])||'')}">`).join('')}</div>
-    <div class="sheet-acts"><button class="ghost" data-close="1" type="button">Cancel</button>
+    <div class="sheet-acts">
+      <button class="ghost danger" id="bdDel" type="button" data-n="${bv.ideas}">Delete board</button>
+      <button class="ghost" data-close="1" type="button">Cancel</button>
       <button class="go" id="bdGo" type="button">Save</button></div>`, ()=>{
     $('bdText').focus();
     $('bdGo').addEventListener('click', async ()=>{
       const labels={}; LANES.forEach(l=>{ const el=$('lb-'+l); if(el) labels[l]=el.value.trim(); });
       try{ await api('/api/boards/'+encodeURIComponent(B.slug),{method:'PATCH',
-             body:JSON.stringify({description:$('bdText').value.trim(), labels})});
-           closeSheet(); await loadBoards(); await reload(); toast('saved'); }
+             body:JSON.stringify({name:$('bdName').value.trim(), description:$('bdText').value.trim(), labels})});
+           closeSheet(); await loadBoards(); await reload();
+           $('boardBtnName').textContent = B.name; toast('saved'); }
       catch(e){ toast(e.message); }
     });
+    /* Two clicks, and the second one says exactly what it destroys. Deleting a
+       board takes every idea on it with it, and there is no undo for that —
+       burying is what "get it out of the way" means here. */
+    const del = $('bdDel');
+    del.addEventListener('click', async ()=>{
+      if(!del.classList.contains('armed')){
+        del.classList.add('armed');
+        del.textContent = `Delete “${B.name}” and ${del.dataset.n} idea${del.dataset.n==='1'?'':'s'}? Click again`;
+        setTimeout(()=>{ if(del.isConnected){ del.classList.remove('armed'); del.textContent='Delete board'; } }, 5000);
+        return;
+      }
+      try{
+        await api('/api/boards/'+encodeURIComponent(B.slug), {method:'DELETE'});
+        closeSheet(); sel=null; B=null; ideas=[];
+        await loadBoards();
+        if(boards.length){ await loadBoard(boards[0].slug); paint(null); writeHash(); }
+        else { board.innerHTML = '<div style="padding:40px;color:var(--muted)">No boards yet. Create one to start.</div>';
+               $('boardBtnName').textContent = '—'; bdesc.textContent=''; }
+        toast('board deleted');
+      }catch(e){ toast(e.message); }
+    });
   });
-});
+}
+bdesc.addEventListener('click', editBoard);
 
 /* ------------------------------ routing ------------------------------
    Every view has an address so a board, a card or a sift pass is a link worth
