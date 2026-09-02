@@ -140,5 +140,9 @@ Issuer and resource both unset ⇒ OAuth off, `/mcp` stays API-key-only.
 - **Drag is desktop-only** (native HTML5 DnD). The phone story is the duel view.
 - **A hand-placed rating loses to the next duel.** Whether dragging should
   instead *pin* an idea out of the pairing pool is an open call.
+- **A no-argument tool must still emit `"properties": {}`.** In Go a nil map
+  marshals to `null`, and one invalid schema makes a strict client reject the
+  *entire* tools/list — every tool vanishes because of the one that takes no
+  input. `internal/api/mcp_test.go` guards it.
 - **The OAuth resource-server layer is a port of another project's.** Once it has two
   proven consumers it should become a shared module rather than a second copy.

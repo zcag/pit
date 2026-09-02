@@ -50,6 +50,12 @@ type tool struct {
 }
 
 func obj(props map[string]any, required ...string) map[string]any {
+	// A nil map marshals to JSON null, and `"properties": null` is not a valid
+	// schema — strict clients reject the entire tools/list over it, so a
+	// no-argument tool takes the whole surface down with it.
+	if props == nil {
+		props = map[string]any{}
+	}
 	m := map[string]any{"type": "object", "properties": props}
 	if len(required) > 0 {
 		m["required"] = required
