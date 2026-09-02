@@ -90,13 +90,14 @@ button,input,textarea,select{font:inherit;color:inherit}
 .pop-row .dot{width:7px;height:7px;border-radius:50%;background:var(--spark);flex:none;margin-top:5px}
 .pop-row.clear .dot{background:var(--cold);opacity:.45}
 .pop-row .mid{min-width:0;flex:1}
-.pop-row .nm{font-size:13.5px;font-weight:500;display:flex;align-items:center;gap:7px}
+.pop-row .nm{display:block;font-size:13.5px;font-weight:500;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pop-row .nm em{font-style:normal;font-family:"JetBrains Mono",monospace;font-size:9.5px;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
-.pop-row .ds{font-size:12px;color:var(--muted);line-height:1.35;margin-top:1px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-left:7px}
+.pop-row .ds{display:block;font-size:12px;color:var(--muted);line-height:1.35;margin-top:1px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pop-row .ct{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--faint);
-  flex:none;margin-top:2px;text-align:right}
+  flex:none;margin-top:2px;text-align:right;white-space:nowrap}
 .pop-row .ct b{color:var(--spark);font-weight:700}
 .pop-empty{padding:14px 12px;font-size:12.5px;color:var(--faint);text-align:center}
 .pop-foot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--hair);padding:7px 9px}
@@ -108,7 +109,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .bdesc:hover{color:var(--muted)}
 .bar-sp{flex:1}
 .stat{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);white-space:nowrap}
-.ghost{background:none;border:1px solid var(--rule);color:var(--muted);padding:6px 10px;
+.ghost{flex:none;background:none;border:1px solid var(--rule);color:var(--muted);padding:6px 10px;
   border-radius:6px;cursor:pointer;font-size:12.5px;white-space:nowrap}
 .ghost:hover{color:var(--ink);border-color:var(--ink)}
 .ghost:focus-visible{outline:2px solid var(--spark);outline-offset:2px}
@@ -166,8 +167,9 @@ button,input,textarea,select{font:inherit;color:inherit}
 .card:focus-visible{outline:2px solid var(--spark);outline-offset:2px}
 .card.dragging{opacity:.35;cursor:grabbing}
 .card.sel{border-color:var(--spark);box-shadow:0 0 0 1px var(--spark)}
-.card .t{font-size:13.5px;font-weight:500;line-height:1.32;letter-spacing:-.005em;margin:0 0 3px}
-.card .n{font-size:11.5px;color:var(--muted);line-height:1.36;margin:0}
+.card .t{font-size:13.5px;font-weight:500;line-height:1.32;letter-spacing:-.005em;margin:0 0 3px;
+  overflow-wrap:anywhere}
+.card .n{font-size:11.5px;color:var(--muted);line-height:1.36;margin:0;overflow-wrap:anywhere}
 .card .f{display:flex;align-items:center;gap:7px;margin-top:8px;
   font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--faint)}
 .card .src{width:5px;height:5px;border-radius:50%;background:var(--cold);flex:none}
@@ -180,19 +182,35 @@ button,input,textarea,select{font:inherit;color:inherit}
 
 /* ---- sift: one card, four directions ---- */
 .sift{position:fixed;inset:0;z-index:120;background:var(--surface);display:flex;flex-direction:column;
-  opacity:0;pointer-events:none;transition:opacity .18s}
-.sift.on{opacity:1;pointer-events:auto}
+  opacity:0;pointer-events:none;transform:scale(.994);
+  transition:opacity .2s ease,transform .2s cubic-bezier(.2,.7,.3,1)}
+.sift.on{opacity:1;pointer-events:auto;transform:none}
 .sift-top{flex:none;display:flex;align-items:center;gap:12px;height:52px;padding:0 14px;border-bottom:1px solid var(--hair)}
 .sift-scope{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--faint)}
 .sift-stage{flex:1;min-height:0;display:grid;gap:10px;padding:12px;
   grid-template-columns:minmax(120px,16vw) minmax(0,1fr) minmax(120px,16vw);
   grid-template-rows:auto minmax(0,1fr) auto}
-.zone{border:1px dashed var(--rule);background:none;border-radius:9px;cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
-  padding:10px;color:var(--muted);transition:background .14s,color .14s,border-color .14s}
+.zone{position:relative;overflow:hidden;border:1px dashed var(--rule);background:none;border-radius:9px;
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  padding:10px;color:var(--muted);
+  transition:background .14s,color .14s,border-color .14s,transform .14s}
 .zone:hover,.zone.armed{background:color-mix(in srgb,var(--spark) 14%,transparent);
   border-color:var(--spark);border-style:solid;color:var(--ink)}
+/* The card lands in a zone; the zone should look like it caught something. */
+.zone.hit{animation:caught .42s cubic-bezier(.2,.7,.3,1)}
+@keyframes caught{
+  0%{background:color-mix(in srgb,var(--spark) 40%,transparent);border-color:var(--spark);
+     border-style:solid;color:var(--ink);transform:scale(1.012)}
+  100%{background:none;border-color:var(--rule);color:var(--muted);transform:none}}
+.zone.out.hit{animation-name:caught-out}
+@keyframes caught-out{
+  0%{background:color-mix(in srgb,var(--dead) 34%,transparent);border-color:var(--dead);
+     border-style:solid;transform:scale(1.012)}
+  100%{background:none;border-color:var(--rule);transform:none}}
+.zone .n.bump{animation:bump .42s cubic-bezier(.2,.7,.3,1)}
+@keyframes bump{0%{transform:translateY(-7px) scale(1.5);color:var(--spark);opacity:0}
+  40%{opacity:1}100%{transform:none;color:var(--faint)}}
 .zone .key{font-family:"JetBrains Mono",monospace;font-size:15px;line-height:1}
 .zone .lbl{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.13em;
   text-transform:uppercase}
@@ -204,45 +222,74 @@ button,input,textarea,select{font:inherit;color:inherit}
 .zone.out:hover,.zone.out.armed{background:color-mix(in srgb,var(--dead) 20%,transparent);
   border-color:var(--dead);color:var(--muted)}
 
-.sift-card{grid-column:2;grid-row:2;align-self:center;justify-self:center;
-  width:min(780px,100%);max-height:100%;overflow-y:auto;background:var(--card);
-  border:1px solid var(--hair);border-radius:11px;box-shadow:var(--lift);
-  padding:clamp(18px,3.5vh,34px) clamp(20px,4vw,44px);display:flex;flex-direction:column;gap:12px;
-  transition:transform .2s cubic-bezier(.3,.7,.3,1),opacity .2s}
-.sift-card.gone{opacity:0}
-.sift-card.to-in{transform:translateY(-40px) scale(.97)}
-.sift-card.to-out{transform:translateY(40px) scale(.97)}
-.sift-card.to-unsure{transform:translateX(-50px) scale(.97)}
-.sift-card.to-maybe{transform:translateX(50px) scale(.97)}
-.sift-card .src{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.13em;
+.deck{grid-column:2;grid-row:2;min-height:0;height:100%;display:flex;
+  align-items:center;justify-content:center;
+  transition:transform .18s cubic-bezier(.2,.7,.3,1)}
+.pile{position:relative;width:min(820px,100%);max-height:100%;display:flex}
+/* Leaning toward the zone you are about to pick, before you pick it. */
+.sift-stage:has(.zone.in:hover) .deck{transform:translateY(-6px)}
+.sift-stage:has(.zone.out:hover) .deck{transform:translateY(6px)}
+.sift-stage:has(.zone.unsure:hover) .deck{transform:translateX(-8px) rotate(-.5deg)}
+.sift-stage:has(.zone.maybe:hover) .deck{transform:translateX(8px) rotate(.5deg)}
+/* The queue as a pile: two card edges behind this one, so "13 left" is also
+   something you see thinning out. */
+.deck i{position:absolute;left:0;right:0;top:0;bottom:0;border-radius:11px;
+  background:color-mix(in srgb,var(--card) 78%,var(--bg));
+  border:1px solid var(--hair);pointer-events:none;transform-origin:50% 0;
+  transition:transform .22s cubic-bezier(.2,.7,.3,1),opacity .22s}
+.deck i.b1{transform:translateY(13px) scaleX(.985);opacity:.85}
+.deck i.b2{transform:translateY(25px) scaleX(.968);opacity:.55}
+/* One card, all of it, no scrolling: type is sized in em off --fit, and the
+   card is measured after render and scaled until the text fits the space it
+   has. A one-line idea comes out big; a long one comes out dense. */
+.sift-card{position:relative;z-index:1;flex:1;min-width:0;max-height:100%;overflow:hidden auto;
+  background:var(--card);border:1px solid var(--hair);border-radius:11px;box-shadow:var(--lift);
+  padding:clamp(16px,3vh,30px) clamp(18px,3.5vw,40px);display:flex;flex-direction:column;
+  font-size:calc(14px * var(--fit,1));gap:.85em}
+.sift-card.over{mask-image:linear-gradient(#000 88%,transparent)}
+.sift-card .src{font-family:"JetBrains Mono",monospace;font-size:.74em;letter-spacing:.13em;
   text-transform:uppercase;color:var(--faint)}
-.sift-card h2{font-size:clamp(21px,3vw,34px);font-weight:600;line-height:1.15;letter-spacing:-.028em;margin:0}
-.sift-card .note{font-size:clamp(13px,1.3vw,16px);color:var(--muted);margin:0;max-width:44ch}
-.sift-card .body{font-size:14px;color:var(--muted);margin:0;max-width:62ch;line-height:1.6;
-  white-space:pre-wrap;padding-left:12px;border-left:2px solid var(--hair)}
-.sift-card .said{margin:0;padding:9px 12px;background:var(--sunk);border-radius:7px;
-  font-size:13px;color:var(--muted);max-width:62ch}
+.sift-card h2{font-size:2.15em;font-weight:600;line-height:1.14;letter-spacing:-.028em;margin:0;
+  overflow-wrap:anywhere}
+.sift-card .body{font-size:1em;color:var(--muted);margin:0;max-width:64ch;line-height:1.6;
+  white-space:pre-wrap;overflow-wrap:anywhere;padding-left:.85em;border-left:2px solid var(--hair)}
+.sift-card .said{margin:0;padding:.6em .85em;background:var(--sunk);border-radius:7px;
+  font-size:.92em;color:var(--muted);max-width:64ch}
 .sift-card .said b{color:var(--ink);font-weight:500}
-.jot{display:flex;gap:8px;align-items:center;margin:-4px 0 2px}
-.jot input{flex:1;max-width:52ch;background:none;border:0;border-bottom:1px dashed transparent;
-  padding:3px 0;font-size:clamp(13px,1.3vw,16px);color:var(--muted)}
+.jot{display:flex;gap:8px;align-items:center;margin:-.35em 0 0}
+.jot input{flex:1;min-width:0;max-width:52ch;background:none;border:0;
+  border-bottom:1px dashed transparent;padding:2px 0;font-size:1.06em;color:var(--muted)}
 .jot:hover input{border-bottom-color:var(--rule)}
 .jot input:focus{outline:none;color:var(--ink);border-bottom-color:var(--spark);border-bottom-style:solid}
 .jot input::placeholder{color:var(--faint)}
-.jot span{font-family:"JetBrains Mono",monospace;font-size:9.5px;color:var(--faint);opacity:0}
+.jot span{font-family:"JetBrains Mono",monospace;font-size:.7em;color:var(--faint);opacity:0}
 .jot:hover span,.jot input:focus + span{opacity:1}
 .sift-foot{flex:none;display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:11px 14px;
   border-top:1px solid var(--hair);font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
 .meter{flex:1;min-width:100px;height:3px;background:var(--sunk);border-radius:2px;overflow:hidden}
-.meter i{display:block;height:100%;background:var(--spark);width:0;transition:width .3s}
+.meter i{display:block;height:100%;width:0;border-radius:2px;
+  background:linear-gradient(90deg,var(--cold),var(--spark));
+  transition:width .32s cubic-bezier(.2,.7,.3,1)}
+.meter i.full{animation:glow 1.1s ease-out}
+@keyframes glow{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--spark) 70%,transparent)}
+  100%{box-shadow:0 0 0 7px transparent}}
 .tally{display:flex;gap:10px}
 .tally b{color:var(--ink);font-weight:700}
+.tally .just{color:var(--spark);animation:bump .42s cubic-bezier(.2,.7,.3,1)}
+.left-n.tick{animation:tick .3s ease-out}
+@keyframes tick{0%{transform:translateY(-4px);opacity:.3}100%{transform:none;opacity:1}}
 .done{grid-column:1/-1;grid-row:1/-1;display:flex;flex-direction:column;justify-content:center;
-  padding:clamp(24px,6vh,60px) clamp(24px,5vw,70px)}
+  padding:clamp(24px,6vh,60px) clamp(24px,5vw,70px);animation:rise .42s cubic-bezier(.2,.7,.3,1)}
+.done>*{animation:rise .5s cubic-bezier(.2,.7,.3,1) backwards}
+.done>*:nth-child(2){animation-delay:.06s}
+.done>*:nth-child(3){animation-delay:.12s}
+.done>*:nth-child(4){animation-delay:.18s}
+.done li{animation:rise .45s cubic-bezier(.2,.7,.3,1) backwards}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .done h2{font-family:"Martian Mono",monospace;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.05em;margin:0 0 8px}
 .done>p{color:var(--muted);margin:0 0 22px;max-width:56ch}
 .done ol{margin:0 0 24px;padding:0;list-style:none;counter-reset:w;max-width:660px}
-.done li{display:flex;gap:14px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--hair);
+.done li{display:flex;gap:14px;align-items:baseline;overflow-wrap:anywhere;padding:9px 0;border-bottom:1px solid var(--hair);
   counter-increment:w;font-size:15px}
 .done li::before{content:counter(w);font-family:"JetBrains Mono",monospace;font-size:11px;
   color:var(--spark);font-weight:700;width:12px;flex:none}
@@ -268,7 +315,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 .dw-x:hover{color:var(--ink);background:var(--sunk)}
 .dw-body{flex:1;min-height:0;overflow-y:auto;padding:16px 16px 22px}
 .dw-title,.dw-note{width:100%;background:none;border:0;padding:0;resize:none;overflow:hidden;display:block}
-.dw-title{font-size:20px;font-weight:600;line-height:1.24;letter-spacing:-.022em;margin:0 0 8px}
+.dw-title{font-size:20px;font-weight:600;line-height:1.24;letter-spacing:-.022em;margin:0 0 8px;
+  overflow-wrap:anywhere}
 .dw-note{font-size:13px;color:var(--muted);line-height:1.45;margin:0 0 16px}
 .dw-title:focus,.dw-note:focus{outline:none}
 .dw-stats{display:flex;flex-wrap:wrap;gap:0 22px;padding:12px 0;margin-bottom:18px;
@@ -290,7 +338,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .cmt-h i{width:5px;height:5px;border-radius:50%;background:var(--cold);flex:none}
 .cmt-h.agent i{background:var(--spark)}
 .cmt-h b{color:var(--muted);font-weight:500;letter-spacing:.1em;text-transform:uppercase}
-.cmt p{margin:0;font-size:13.5px;line-height:1.5;white-space:pre-wrap}
+.cmt p{margin:0;font-size:13.5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
 .cmt-empty{font-size:13px;color:var(--faint);padding:10px 0 4px;line-height:1.45;margin:0}
 .composer{display:flex;gap:8px;margin-top:12px}
 .composer textarea{flex:1;min-height:38px;max-height:120px;background:var(--card);color:var(--ink);
@@ -329,7 +377,8 @@ button,input,textarea,select{font:inherit;color:inherit}
   /* The phone story is the sift, so it gets the whole screen: card on top,
      the four votes as a row of thumbs underneath (or swipe the card). */
   .sift-stage{grid-template-columns:repeat(4,1fr);grid-template-rows:minmax(0,1fr) auto;gap:8px;padding:8px}
-  .sift-card{grid-column:1/-1;grid-row:1;align-self:stretch;width:100%}
+  .deck{grid-column:1/-1;grid-row:1;align-self:stretch;width:100%}
+  .deck i{display:none}
   .zone{grid-row:2 !important;flex-direction:column !important;gap:3px;padding:9px 4px}
   .zone.unsure{grid-column:1}.zone.out{grid-column:2}.zone.maybe{grid-column:3}.zone.in{grid-column:4}
   .zone .key{display:none}
@@ -400,7 +449,6 @@ async function api(path, opts){
   return body;
 }
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const trim = (s,n=32) => s.length>n ? s.slice(0,n-1)+'…' : s;
 function ago(iso){
   const d = (Date.now()-new Date(iso))/1000;
   if(d<3600) return Math.max(1,Math.round(d/60))+'m';
@@ -679,36 +727,108 @@ board.addEventListener('click', e=>{
    One card, four directions. The queue is client-side so a skip costs
    nothing and the card order stays stable while you work through it. */
 let q=[], scope=null, siftFor=null, busy=false, did={in:0,maybe:0,unsure:0,out:0}, started=0;
+let justVoted=null, enterFrom=null;
+
+const REDUCED = matchMedia('(prefers-reduced-motion:reduce)').matches;
+const ms = n => REDUCED ? 0 : n;
+// Where each lane lives, so a card leaves toward the zone that caught it.
+const AWAY = {in:[0,-1], out:[0,1], unsure:[-1,0], maybe:[1,0]};
+const EASE_OUT = 'cubic-bezier(.4,0,.75,.25)', EASE_IN = 'cubic-bezier(.2,.7,.3,1)';
 
 function zoneHTML(l){
-  return `<button class="zone ${l}" type="button" data-lane="${l}">
+  const hit = justVoted===l;
+  return `<button class="zone ${l}${hit?' hit':''}" type="button" data-lane="${l}">
     <span class="key">${ARROW[l]}</span><span class="lbl">${esc(label(l))}</span>
-    <span class="n">${inLane(l).length}</span></button>`;
+    <span class="n${hit?' bump':''}">${inLane(l).length}</span></button>`;
 }
 function drawCard(){
   const x = byId(q[0]);
   if(!x) return drawDone();
   const said = (x.comment_count||0);
+  const depth = Math.min(2, q.length-1);
   stage.innerHTML = VOTES.map(zoneHTML).join('') + `
-    <article class="sift-card" id="siftCard">
-      <span class="src">${x.source==='agent'?'an agent suggested':'you wrote'} · ${ago(x.created_at)} ago</span>
-      <h2>${esc(x.title)}</h2>
-      <div class="jot"><input id="jot" placeholder="one line — what it is"
-        value="${esc(x.note)}" autocomplete="off"><span>N</span></div>
-      ${x.body?`<p class="body">${esc(trim(x.body,900))}</p>`:''}
-      ${said?`<p class="said"><b>${said} note${said===1?'':'s'}</b> on this card — open it on the board to read them.</p>`:''}
-    </article>`;
+    <div class="deck"><div class="pile">
+      ${depth>1?'<i class="b2"></i>':''}${depth>0?'<i class="b1"></i>':''}
+      <article class="sift-card" id="siftCard">
+        <span class="src">${x.source==='agent'?'an agent suggested':'you wrote'} · ${ago(x.created_at)} ago</span>
+        <h2>${esc(x.title)}</h2>
+        <div class="jot"><input id="jot" placeholder="one line — what it is"
+          value="${esc(x.note)}" autocomplete="off"><span>N</span></div>
+        ${x.body?`<p class="body">${esc(x.body)}</p>`:''}
+        ${said?`<p class="said"><b>${said} note${said===1?'':'s'}</b> on this card — open it on the board to read them.</p>`:''}
+      </article>
+    </div></div>`;
+  justVoted = null;
+  fitCard();
+  enter();
   drawFoot();
+}
+/* The card is sized to its text rather than the text to the card: start
+   generous, measure, and scale --fit down until it fits the height it has.
+   Below the floor the body is genuinely long and scrolling is the lesser evil,
+   and .over fades the bottom edge so it is obvious there is more. */
+function fitCard(){
+  const card = $('siftCard'), deck = stage.querySelector('.deck');
+  if(!card || !deck) return;
+  const avail = deck.clientHeight;
+  if(!avail) return;
+  let f = 1.42;
+  const set = v => { f = Math.min(1.42, Math.max(.62, +v.toFixed(3)));
+                     card.style.setProperty('--fit', f); };
+  set(f);
+  if(card.scrollHeight > avail) set(f * Math.max(.45, avail / card.scrollHeight));
+  for(let i=0; i<7 && card.scrollHeight > avail && f > .621; i++) set(f - .05);
+  card.classList.toggle('over', card.scrollHeight > card.clientHeight + 1);
+}
+addEventListener('resize', ()=>{ if(siftEl.classList.contains('on')) fitCard(); });
+
+/* Resting transforms of the two cards showing behind this one, and one step
+   further back — the pile advances by animating between them. */
+const REST = {b1:'translateY(13px) scaleX(.985)', b2:'translateY(25px) scaleX(.968)'};
+const BACK = {b1:'translateY(25px) scaleX(.968)', b2:'translateY(38px) scaleX(.95)'};
+const ghost = k => stage.querySelector('.deck i.'+k);
+
+function enter(){
+  const card = $('siftCard'); if(!card) return;
+  const [dx,dy] = enterFrom ? AWAY[enterFrom] : [0,0];
+  const back = enterFrom
+    ? {transform:`translate(${dx*180}px,${dy*110}px) rotate(${dx*3}deg) scale(.95)`, opacity:0}
+    : {transform:REST.b1, opacity:.4};          // it rises out of the pile
+  enterFrom = null;
+  card.animate([back, {transform:'none', opacity:1}],
+    {duration: ms(dx||dy ? 300 : 240), easing: EASE_IN});
+  for(const k of ['b1','b2']){
+    const g = ghost(k);
+    if(g) g.animate([{transform:BACK[k], opacity:0}, {}], {duration: ms(320), easing: EASE_IN});
+  }
+}
+function leave(lane){
+  const card = $('siftCard');
+  if(!card) return Promise.resolve();
+  const [dx,dy] = AWAY[lane] || [0,0];
+  // the pile closes the gap while the card is still in the air
+  const b1 = ghost('b1'), b2 = ghost('b2');
+  if(b1) b1.animate([{}, {transform:'none', opacity:1}],
+    {duration: ms(240), easing: EASE_IN, fill:'forwards'});
+  if(b2) b2.animate([{}, {transform:REST.b1, opacity:.85}],
+    {duration: ms(240), easing: EASE_IN, fill:'forwards'});
+  const a = card.animate(
+    [{transform:'none', opacity:1},
+     {transform:`translate(${dx*280}px,${dy*160}px) rotate(${dx*4}deg) scale(.93)`, opacity:0}],
+    {duration: ms(240), easing: EASE_OUT, fill:'forwards'});
+  return a.finished.catch(()=>{});
 }
 function drawFoot(){
   const done = started - q.length, pct = started ? Math.round(done/started*100) : 0;
-  const tally = VOTES.filter(l=>did[l]).map(l=>`${ARROW[l]}<b>${did[l]}</b>`).join(' ');
+  const tally = VOTES.filter(l=>did[l]).map(l=>
+    `<span class="${l===lastLane?'just':''}">${ARROW[l]}<b>${did[l]}</b></span>`).join(' ');
   sfoot.innerHTML =
-    `<span>${q.length} left</span>
-     <span class="meter"><i style="width:${pct}%"></i></span>
+    `<span class="left-n tick">${q.length} left</span>
+     <span class="meter"><i class="${pct===100?'full':''}" style="width:${pct}%"></i></span>
      <span class="tally">${tally||'nothing yet'}</span>
      <span>↑↓←→ vote · space skip · u undo · n note · esc out</span>`;
 }
+let lastLane = null;
 function drawDone(){
   const top = inLane('in').slice(0,5);
   const total = VOTES.reduce((n,l)=>n+did[l],0);
@@ -718,7 +838,7 @@ function drawDone(){
     <p>${total
       ? `${total} decided — ${VOTES.map(l=>`${did[l]} ${label(l)}`).join(', ')}. ${esc(label('in'))} is what you meant to keep; drag it into the order you want.`
       : 'Nothing decided this pass.'}</p>
-    ${top.length?`<ol>${top.map(x=>`<li>${esc(x.title)}<span>${esc(label('in'))}</span></li>`).join('')}</ol>`:''}
+    ${top.length?`<ol>${top.map((x,i)=>`<li style="animation-delay:${.18+i*.05}s">${esc(x.title)}<span>${esc(label('in'))}</span></li>`).join('')}</ol>`:''}
     <div class="done-acts">
       <button class="ghost" id="doneBack" type="button">Back to board</button>
       ${next?`<button class="go" id="doneNext" type="button">Sift ${esc(label(next))} <span class="n">${inLane(next).length}</span></button>`:''}
@@ -729,12 +849,12 @@ function drawDone(){
 }
 async function vote(lane){
   if(busy || !q.length) return;
-  const id = q[0], card = $('siftCard');
-  busy = true;
-  if(card){ card.classList.add('to-'+lane, 'gone'); }
+  const id = q[0];
+  busy = true; lastLane = lane;
+  if(navigator.vibrate) navigator.vibrate(9);
+  const flying = leave(lane);
   try{
-    const jot = $('jot');
-    const it = byId(id);
+    const jot = $('jot'), it = byId(id);
     if(jot && it && jot.value.trim() !== (it.note||'')){
       await api('/api/ideas/'+id, {method:'PATCH', body:JSON.stringify({note: jot.value.trim()})});
       it.note = jot.value.trim();
@@ -743,13 +863,24 @@ async function vote(lane){
       {method:'POST', body: JSON.stringify({idea:id, lane})});
     Object.assign(byId(id)||{}, r);
     ideas.sort(order);
-    did[lane]++; q.shift();
-  }catch(e){ toast(e.message); busy=false; if(card) card.classList.remove('to-'+lane,'gone'); return; }
-  setTimeout(()=>{ busy=false; drawCard(); }, 160);
+    did[lane]++; q.shift(); justVoted = lane;
+  }catch(e){
+    toast(e.message); busy = false;
+    stage.querySelectorAll('.sift-card, .deck i').forEach(el=>
+      el.getAnimations().forEach(a=>a.reverse()));
+    return;
+  }
+  await flying;
+  busy = false; drawCard();
 }
-function skip(){
+async function skip(){
   if(busy || q.length<2) return;
-  q.push(q.shift()); drawCard();
+  busy = true;
+  const card = $('siftCard');
+  if(card) await card.animate(
+    [{transform:'none',opacity:1},{transform:'translateY(34px) scale(.93)',opacity:0}],
+    {duration: ms(190), easing: EASE_OUT, fill:'forwards'}).finished.catch(()=>{});
+  q.push(q.shift()); busy = false; drawCard();
   toast('skipped — it comes back at the end of this pass');
 }
 async function undo(){
@@ -765,7 +896,8 @@ async function undo(){
     if(undone && did[undone]) did[undone]--;
     if(siftEl.classList.contains('on')){
       if(q[0]!==it.id) q.unshift(it.id);
-      drawCard();
+      enterFrom = undone;           // it flies back in from wherever it went
+      lastLane = null; drawCard();
     } else { paint(snapshot()); }
     toast(`back in ${label(it.lane)}`);
   }catch(e){ toast(e.message==='not found' ? 'nothing to undo' : e.message); }
@@ -776,7 +908,9 @@ function openSift(l){
   if(!scope || !inLane(scope).length) return toast('nothing to sift');
   q = inLane(scope).map(x=>x.id);
   started = q.length; did = {in:0,maybe:0,unsure:0,out:0}; siftFor = B.slug;
+  justVoted = null; lastLane = null; enterFrom = null;
   sscope.textContent = 'sifting ' + label(scope);
+  closePop();                       // it sits above the overlay otherwise
   siftEl.classList.add('on'); siftEl.setAttribute('aria-hidden','false');
   drawCard(); writeHash();
 }

@@ -132,7 +132,11 @@ POST   /api/ideas/{id}/comments
 ## UI
 
 The queue, then the four lanes it drains into. `S` opens the sift, `Esc` leaves
-it, arrows vote, `space` skips, `U` undoes anywhere. Drag to reorder within a
+it, arrows vote, `space` skips, `U` undoes anywhere. In the sift the card is
+sized to its text rather than the text to the card — it is measured after render
+and scaled until it fits, so a one-line idea comes out big, a long one dense, and
+neither asks you to scroll. The two card edges behind it are the rest of the
+queue, and they thin out as you go. Drag to reorder within a
 lane or to move between them; a column's `sift` button re-sifts just that lane,
 which is how the `unsure` pile gets a second pass. On a phone the sift is the
 whole screen and the four votes are swipes. Every view has an address:

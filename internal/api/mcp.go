@@ -303,6 +303,9 @@ func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// Counts describe the board, not the slice being returned: an agent asking
+		// for one lane still needs to know what is waiting in the others.
+		counts := store.Counts(ideas)
 		if l := argStr(a, "lane"); l != "" {
 			ideas = store.InLane(ideas, model.Lane(l))
 		}
@@ -310,7 +313,7 @@ func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
 			ideas = filter(ideas, func(i model.Idea) bool { return string(i.Source) == src })
 		}
 		return jsonText(map[string]any{"board": b.Slug, "labels": b.Labels,
-			"counts": store.Counts(ideas), "ideas": ideas})
+			"counts": counts, "ideas": ideas})
 
 	case "get_idea":
 		it, err := st.Idea(argStr(a, "id"))
