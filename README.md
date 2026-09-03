@@ -135,7 +135,12 @@ POST   /api/ideas/{id}/comments
 
 ## UI
 
-The queue, then the four lanes it drains into. `S` opens the sift, `Esc` leaves
+One lane holds the stage and the rest are a rail beside it. The stage is `in`,
+because after a sift that is the answer and the answer should not be a narrow
+column at the far right: its cards are numbered in your order, wide enough to
+read, and carry the first lines of the body. Clicking any rail lane's header
+puts *it* on the stage — which is how you read the maybes, or the graveyard,
+without leaving the board (`#/<board>/lane/<lane>`). `S` opens the sift, `Esc` leaves
 it, arrows vote, `space` skips, `U` undoes anywhere. In the sift the card is
 sized to its text rather than the text to the card — it is measured after render
 and scaled until it fits, so a one-line idea comes out big, a long one dense, and
