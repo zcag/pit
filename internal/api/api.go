@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zcag/mcpauth"
 	"github.com/zcag/pit/internal/model"
 	"github.com/zcag/pit/internal/store"
 )
@@ -23,8 +24,12 @@ const TopK = 5
 type Config struct {
 	Store  *store.Store
 	APIKey string
-	OAuth  *OAuth
-	Web    fs.FS // embedded UI
+	// OAuth lets /mcp also accept an authorization-server-issued JWT (the
+	// Claude.ai / ChatGPT "Connect" flow) alongside the static key. nil means
+	// off, and every call on it is nil-safe, so nothing here branches on it
+	// except where the behaviour genuinely differs.
+	OAuth *mcpauth.Verifier
+	Web   fs.FS // embedded UI
 }
 
 type Server struct {
@@ -43,13 +48,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 func (s *Server) routes() {
 	m := s.mux
 
-	// Public: the metadata a client reads to learn how to authenticate. Served at
-	// both the bare well-known path and the path-scoped alias, because Claude and
-	// ChatGPT probe different ones.
-	if s.cfg.OAuth != nil {
-		m.HandleFunc("GET "+WellKnownPRM, s.cfg.OAuth.ServePRM)
-		m.HandleFunc("GET "+WellKnownPRM+s.cfg.OAuth.ResourcePath(), s.cfg.OAuth.ServePRM)
-	}
+	// Public: the metadata a client reads to learn how to authenticate.
+	s.cfg.OAuth.Mount(m)
 
 	api := func(pattern string, h http.HandlerFunc) { m.Handle(pattern, s.auth(h)) }
 
@@ -133,7 +133,7 @@ func (s *Server) auth(next http.HandlerFunc) http.Handler {
 			next(w, r)
 			return
 		}
-		if s.cfg.OAuth != nil && tok != "" && s.cfg.OAuth.Verify(tok) {
+		if tok != "" && s.cfg.OAuth.Verify(tok) {
 			next(w, r)
 			return
 		}

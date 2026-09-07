@@ -207,6 +207,11 @@ Config is env-only:
 
 Issuer and resource both unset ⇒ OAuth off, `/mcp` stays API-key-only.
 
+The resource-server layer behind those four is
+[zcag/mcpauth](https://github.com/zcag/mcpauth) — token verification, the RFC
+9728 metadata, and the discovery challenge, with nothing in it that knows what
+pit is. The original keeps its own older copy on purpose; pit is the consumer.
+
 Opening a pre-lanes database migrates it in place: buckets map onto lanes
 (`shortlist`→`in`, `parked`→`unsure`, the intake bucket→`unsorted`, the terminal
 one→`out`), a custom bucket name survives as that lane's label, and the Glicko
@@ -225,5 +230,9 @@ copy of the file first.
   marshals to `null`, and one invalid schema makes a strict client reject the
   *entire* tools/list — every tool vanishes because of the one that takes no
   input. `internal/api/mcp_test.go` guards it.
-- **The OAuth resource-server layer is a port of another project's.** Once it has two
-  proven consumers it should become a shared module rather than a second copy.
+- **The identity gate has to name the claim the token actually carries.** This
+  AuthKit app delegates sign-in to an external identity provider and issues `sub="1"` with no `email`, so
+  `PIT_OAUTH_ALLOWED_EMAIL` alone rejects every connect while the token itself
+  verifies perfectly. `deploy/pit.service.template` says so; the deployed unit
+  had drifted from it for days. Connect once and read the identity off the
+  journal (`grep 'first verified-token identity'`) before pinning either.

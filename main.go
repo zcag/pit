@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/zcag/mcpauth"
 	"github.com/zcag/pit/internal/api"
 	"github.com/zcag/pit/internal/model"
 	"github.com/zcag/pit/internal/store"
@@ -69,12 +70,13 @@ func main() {
 
 	// OAuth is off unless both issuer and resource are set; when off, /mcp stays
 	// API-key-only and advertises nothing.
-	oauth := api.LoadOAuth(ctx, "pit",
-		os.Getenv("PIT_OAUTH_ISSUER"),
-		os.Getenv("PIT_MCP_RESOURCE"),
-		os.Getenv("PIT_OAUTH_ALLOWED_EMAIL"),
-		os.Getenv("PIT_OAUTH_ALLOWED_SUB"),
-	)
+	oauth := mcpauth.New(ctx, mcpauth.Config{
+		Name:          "pit",
+		Issuer:        os.Getenv("PIT_OAUTH_ISSUER"),
+		Resource:      os.Getenv("PIT_MCP_RESOURCE"),
+		AllowedEmails: os.Getenv("PIT_OAUTH_ALLOWED_EMAIL"),
+		AllowedSubs:   os.Getenv("PIT_OAUTH_ALLOWED_SUB"),
+	})
 
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
