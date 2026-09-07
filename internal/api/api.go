@@ -53,6 +53,7 @@ func (s *Server) routes() {
 
 	api := func(pattern string, h http.HandlerFunc) { m.Handle(pattern, s.auth(h)) }
 
+	api("GET /api/all", s.everything)
 	api("GET /api/boards", s.listBoards)
 	api("POST /api/boards", s.createBoard)
 	api("GET /api/boards/{board}", s.getBoard)
@@ -65,6 +66,9 @@ func (s *Server) routes() {
 	api("POST /api/boards/{board}/sift", s.sift)
 	api("POST /api/boards/{board}/sift/undo", s.undo)
 	api("GET /api/boards/{board}/log", s.log)
+	api("GET /api/boards/{board}/shares", s.listShares)
+	api("POST /api/boards/{board}/shares", s.createShare)
+	api("DELETE /api/shares/{token}", s.deleteShare)
 
 	api("GET /api/ideas/{id}", s.getIdea)
 	api("PATCH /api/ideas/{id}", s.patchIdea)
@@ -73,6 +77,10 @@ func (s *Server) routes() {
 	api("POST /api/ideas/{id}/comments", s.addComment)
 
 	m.Handle("/mcp", s.auth(s.mcpHandler))
+
+	// The one route that answers without a key. Registered before the catch-all
+	// so it is never bounced to /login.
+	m.HandleFunc("GET /s/{token}", s.sharePage)
 
 	m.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
 		if s.hasSession(r) {
@@ -208,6 +216,38 @@ func (s *Server) listBoards(w http.ResponseWriter, r *http.Request) {
 		out = append(out, v)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"boards": out, "lanes": model.Lanes})
+}
+
+// everything is the one question that does not respect board boundaries: what
+// have I actually committed to. Each board's `in` lane, in the owner's order,
+// side by side — not merged and not ranked against each other.
+func (s *Server) everything(w http.ResponseWriter, r *http.Request) {
+	lane := model.Lane(r.URL.Query().Get("lane"))
+	if lane == "" {
+		lane = model.In
+	}
+	bs, err := s.cfg.Store.ListBoards()
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	type group struct {
+		Board model.Board  `json:"board"`
+		Ideas []model.Idea `json:"ideas"`
+	}
+	out := make([]group, 0, len(bs))
+	kept := 0
+	for _, b := range bs {
+		ideas, err := s.cfg.Store.ListIdeas(b.ID)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		g := store.InLane(ideas, lane)
+		kept += len(g)
+		out = append(out, group{Board: b, Ideas: g})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"lane": lane, "kept": kept, "boards": out})
 }
 
 func (s *Server) createBoard(w http.ResponseWriter, r *http.Request) {

@@ -88,6 +88,13 @@ an agent could set one, the board would stop being evidence of what *you* think,
 which is the only thing it is for. Pushing a card back to `unsorted` is allowed:
 that is asking for a decision, not making one.
 
+Everything an agent writes is advocacy for adding, so nothing in the loop ever
+argues the other way and the `in` lane never gets tested except by your own
+second look. `argue_against` is the call that fixes that: it writes nothing
+itself, it hands back the kept cards plus the shape an honest objection takes —
+what would have to be true, what it competes with, what it quietly costs — and
+the agent posts one per card as a comment. You invoke it; nothing watches.
+
 Connect from Claude Code:
 
 ```sh
@@ -108,6 +115,7 @@ serves RFC 9728 Protected Resource Metadata so the host can discover it.
 | `get_idea` | body, comment thread, lane |
 | `update_idea` | title, note, body — and `unsorted` as the only lane it may set |
 | `comment` | where an agent argues its case |
+| `argue_against` | the `in` lane plus the brief for attacking it, one objection per card |
 | `top` | the `in` lane, plus how much is still unsorted |
 
 ## REST
@@ -115,6 +123,7 @@ serves RFC 9728 Protected Resource Metadata so the host can discover it.
 Everything the UI does. `Authorization: Bearer <key>`, or the session cookie.
 
 ```
+GET    /api/all?lane=in                   every board's kept lane, side by side
 GET    /api/boards                        list, each with its lane counts
 POST   /api/boards                        create
 GET    /api/boards/{board}                one board + counts
@@ -127,6 +136,11 @@ GET    /api/boards/{board}/top?k=5        the short answer
 POST   /api/boards/{board}/sift           {idea, lane} — one vote
 POST   /api/boards/{board}/sift/undo      void the last call, restore the card
 GET    /api/boards/{board}/log?n=50       what you decided, newest first
+GET    /api/boards/{board}/shares         live share links for this board
+POST   /api/boards/{board}/shares         {lane} — mint one, or return the one that exists
+DELETE /api/shares/{token}                revoke
+
+GET    /s/{token}                         the shared lane, rendered — the one route with no key
 
 GET    /api/ideas/{id}
 PATCH  /api/ideas/{id}                    title, note, body, lane
@@ -160,8 +174,16 @@ which is how the `unsure` pile gets a second pass. On a phone the sift is the
 whole screen and the four votes are swipes. Clicking the description opens the
 board itself — its name, its lane labels, and the one destructive button in the
 app: deleting a board takes every idea on it and asks twice, naming the count.
+`#/all` is the one view that is not about a board: every board's `in` lane on
+one stage, grouped, each still ordered by hand — because "what have I actually
+committed to" does not respect board boundaries. Nothing is merged or ranked
+across them, and a card cannot be dragged from one board's answer into
+another's. The stage's `share` button mints a read-only link to that one lane
+(`/s/<token>`) — the only route in pit that answers without the key, so a
+shortlist can be shown to someone instead of screenshotted; the token is the
+whole credential and the same button revokes it.
 Every view has an address:
-`#/<board>`, `#/<board>/<ideaId>`, `#/<board>/sift[/<lane>]`.
+`#/<board>`, `#/<board>/<ideaId>`, `#/<board>/sift[/<lane>]`, `#/all`.
 
 ## Running it
 

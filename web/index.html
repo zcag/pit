@@ -88,6 +88,8 @@ button,input,textarea,select{font:inherit;color:inherit}
   border:0;border-radius:6px;padding:8px 9px;cursor:pointer}
 .pop-row:hover,.pop-row.at{background:var(--sunk)}
 .pop-row .dot{width:7px;height:7px;border-radius:50%;background:var(--spark);flex:none;margin-top:5px}
+.pop-all{border-bottom:1px solid var(--hair);padding:5px}
+.pop-row.every .dot{background:var(--cold)}
 .pop-row.clear .dot{background:var(--cold);opacity:.45}
 .pop-row .mid{min-width:0;flex:1}
 .pop-row .nm{display:block;font-size:13.5px;font-weight:500;
@@ -140,6 +142,19 @@ button,input,textarea,select{font:inherit;color:inherit}
 .col.over{background:color-mix(in srgb,var(--spark) 11%,var(--bg))}
 .stage{border-right:1px solid var(--rule)}
 .stage.is-out{background:color-mix(in srgb,var(--bg) 88%,var(--sunk))}
+/* Everything kept, on one stage. The question "what have I committed to" does
+   not respect board boundaries — it is the union, and it is short by
+   construction. Each board keeps its own stage; nothing is merged or ranked
+   across them. */
+.board.all{grid-template-columns:minmax(0,1fr)}
+.all-scroll{flex:1;min-height:0;overflow-y:auto}
+.all .stage{flex:none;border-right:0}
+.all .stage .col-body{flex:none;overflow:visible;padding-bottom:4px}
+.all .stage .col-head{padding-top:22px}
+.all .col-name{cursor:pointer;background:none;border:0;padding:0;font:inherit;
+  font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink)}
+.all .col-name:hover{color:var(--spark)}
 .rail{min-height:0;display:flex;flex-direction:column;overflow-y:auto;background:var(--sunk)}
 .rail .col{flex:none;background:none;border-bottom:1px solid var(--hair)}
 .rail .col:last-child{border-bottom:0}
@@ -474,6 +489,7 @@ button,input,textarea,select{font:inherit;color:inherit}
     </button>
     <div class="pop" id="boardPop" hidden>
       <input id="popQ" placeholder="Filter boards…" autocomplete="off" aria-label="Filter boards">
+      <div class="pop-all" id="popAll"></div>
       <div class="pop-list" id="popList" role="listbox"></div>
       <div class="pop-foot"><button class="pop-new" id="popNew" type="button">New board…</button>
         <span class="pop-hint">B</span></div>
@@ -549,9 +565,15 @@ const board=$('board'), statEl=$('statEl'), bdesc=$('bdesc'), siftEl=$('sift'),
       stage=$('stage'), sfoot=$('siftFoot'), sscope=$('siftScope'), drawer=$('drawer'),
       scrim=$('scrim'), sheet=$('sheet'), sheetIn=$('sheetIn'),
       boardBtn=$('boardBtn'), boardPop=$('boardPop'), popQ=$('popQ'), popList=$('popList'),
-      find=$('find');
+      popAll=$('popAll'), find=$('find');
 
 let boards=[], B=null, ideas=[], sel=null, fresh=new Set(), routing=false;
+/* The everything view: no board is current, `ideas` holds every board's `in`
+   lane at once, and each board still gets its own stage inside it. */
+let allMode=false, allBoards=[];
+const ALL_LANE = 'in';
+const kept = bid => ideas.filter(x => x.board_id===bid && x.lane===ALL_LANE);
+const labelOf = (bd,l) => (bd.labels && bd.labels[l]) || l;
 
 const label = l => (B && B.labels && B.labels[l]) || l;
 const inLane = l => ideas.filter(i => i.lane === l);
@@ -572,16 +594,31 @@ async function loadBoards(){
 async function loadBoard(slug){
   const r = await api('/api/boards/'+encodeURIComponent(slug)+'/ideas');
   B = r.board; ideas = r.ideas||[]; sel=null; fresh.clear(); stageLane = 'in';
+  allMode = false; board.classList.remove('all');
   $('boardBtnName').textContent = B.name;
   bdesc.textContent = B.description || 'add a description';
   document.title = 'pit · '+B.name;
 }
 async function reload(keepFresh){
-  const r = await api('/api/boards/'+encodeURIComponent(B.slug)+'/ideas');
   const prev = snapshot();
-  ideas = r.ideas||[]; B = r.board;
+  if(allMode){ await loadAll(); }
+  else {
+    const r = await api('/api/boards/'+encodeURIComponent(B.slug)+'/ideas');
+    ideas = r.ideas||[]; B = r.board;
+  }
   if(!keepFresh) fresh.clear();
   paint(prev);
+}
+async function loadAll(){
+  const r = await api('/api/all');
+  allBoards = (r.boards||[]).map(g=>g.board);
+  ideas = (r.boards||[]).flatMap(g=>g.ideas);
+  ideas.sort(order);
+  allMode = true; B = null; sel = null;
+  board.classList.add('all');
+  $('boardBtnName').textContent = 'everything';
+  bdesc.textContent = 'what you are keeping, on every board';
+  document.title = 'pit · everything';
 }
 
 /* ------------------------------ board ------------------------------
@@ -623,6 +660,7 @@ function emptyLine(k, filtered){
 // While filtering, a lane says how much of it you are looking at.
 const laneCount = (all, some) => query ? `${some.length}/${all.length}` : String(all.length);
 function paint(prev){
+  if(allMode) return paintAll(prev);
   if(!B) return;
   if(!LANES.includes(stageLane)) stageLane = 'in';
   const scroll={}; board.querySelectorAll('.col-body').forEach(b=>scroll[b.dataset.k]=b.scrollTop);
@@ -633,6 +671,7 @@ function paint(prev){
         <span class="col-name">${esc(label(stageLane))}</span><span class="col-n">${laneCount(all,g)}</span>
         ${all.length&&stageLane!=='out'?`<button class="col-sift" type="button" data-scope="${stageLane}">sift</button>`:''}
         ${g.length?'<button class="col-sift" type="button" data-copy="1" title="Copy this lane as markdown — shift for the bodies too">copy</button>':''}
+        ${all.length?'<button class="col-sift" type="button" data-share="1" title="A read-only link to this lane, for someone who is not you">share</button>':''}
         ${all.length>1?'<span class="col-hint">drag or J/K to order</span>':''}
       </header>
       <div class="col-body" data-k="${stageLane}">
@@ -660,15 +699,39 @@ function paint(prev){
   board.innerHTML = stage + `<aside class="rail">${rail}</aside>`;
 
   board.querySelectorAll('.col-body').forEach(b=>{ if(scroll[b.dataset.k]) b.scrollTop=scroll[b.dataset.k]; });
-  if(prev){ // FLIP: a card that moved slides from where it was
-    board.querySelectorAll('.card').forEach(c=>{
-      const was=prev[c.dataset.id]; if(!was) return;
-      const now=c.getBoundingClientRect(), dx=was.left-now.left, dy=was.top-now.top;
-      if(!dx&&!dy) return;
-      c.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:'none'}],
-                {duration:260,easing:'cubic-bezier(.2,.7,.3,1)'});
-    });
-  }
+  flip(prev);
+  drawStat();
+}
+// A card that moved slides from where it was.
+function flip(prev){
+  if(!prev) return;
+  board.querySelectorAll('.card').forEach(c=>{
+    const was=prev[c.dataset.id]; if(!was) return;
+    const now=c.getBoundingClientRect(), dx=was.left-now.left, dy=was.top-now.top;
+    if(!dx&&!dy) return;
+    c.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:'none'}],
+              {duration:260,easing:'cubic-bezier(.2,.7,.3,1)'});
+  });
+}
+function paintAll(prev){
+  const scroll = board.querySelector('.all-scroll')?.scrollTop || 0;
+  board.innerHTML = `<div class="all-scroll">` + (allBoards.length ? allBoards.map(bd=>{
+    const all = kept(bd.id), show = all.filter(matches);
+    return `<section class="col stage" data-k="${ALL_LANE}" data-b="${esc(bd.id)}">
+      <header class="col-head">
+        <button class="col-name" type="button" data-go="${esc(bd.slug)}">${esc(bd.name)}</button>
+        <span class="col-n">${laneCount(all,show)}</span>
+        <span class="col-hint">${esc(labelOf(bd,ALL_LANE))}</span>
+      </header>
+      <div class="col-body" data-k="${ALL_LANE}" data-b="${esc(bd.id)}">
+        ${show.length ? show.map(x=>cardHTML(x, all.indexOf(x), true)).join('')
+          : `<div class="col-empty">${all.length
+              ? `No match for “${esc(query)}” in ${esc(bd.name)}.`
+              : `Nothing kept on ${esc(bd.name)} yet.`}</div>`}
+      </div></section>`;
+  }).join('') : '<div class="col-empty">No boards yet.</div>') + `</div>`;
+  const sc = board.querySelector('.all-scroll'); if(sc) sc.scrollTop = scroll;
+  flip(prev);
   drawStat();
 }
 function setStage(k){
@@ -678,7 +741,13 @@ function setStage(k){
 function drawStat(){
   statEl.textContent = query
     ? `${ideas.filter(matches).length} of ${ideas.length} match`
-    : `${nLive()} live · ${inLane('out').length} out`;
+    : allMode ? `${ideas.length} kept · ${allBoards.length} boards`
+              : `${nLive()} live · ${inLane('out').length} out`;
+  if(allMode){
+    $('siftN').textContent = 0; $('siftWhat').textContent = 'Sift';
+    $('siftBtn').disabled = true; $('siftBtn').title = 'open a board to sift it';
+    return;
+  }
   const s = nextScope();
   $('siftN').textContent = s ? inLane(s).length : 0;
   $('siftWhat').textContent = s && s!=='unsorted' ? 'Sift '+label(s) : 'Sift';
@@ -736,11 +805,15 @@ function refocus(id){
 }
 async function nudge(id, dir){
   const it = byId(id); if(!it) return;
-  const lane = inLane(it.lane), at = lane.findIndex(x=>x.id===id), to = at+dir;
-  if(at<0 || to<0 || to>=lane.length) return;
-  const rest = lane.filter(x=>x.id!==id);
+  const g = siblings(it), at = g.findIndex(x=>x.id===id), to = at+dir;
+  if(at<0 || to<0 || to>=g.length) return;
+  const rest = g.filter(x=>x.id!==id);
   await move(id, it.lane, between(rest[to-1], rest[to]));
 }
+// The list a card is ordered inside: its lane on a board, or its own board's
+// slice of the everything view.
+const siblings = it => allMode ? kept(it.board_id) : inLane(it.lane);
+const groupIn = col => col.dataset.b ? kept(col.dataset.b) : inLane(col.dataset.k);
 
 // Halfway between the neighbours it ends up with, or a step past the end.
 // A drag, a fingertip and a J/K nudge all land through this.
@@ -749,8 +822,12 @@ const between = (above, below) =>
 
 // Dropping onto a column: the card above the midpoint you released over wins.
 async function dropOn(item, col, clientY, over){
+  // Nothing crosses a board here: the everything view shows four answers side
+  // by side, it does not merge them.
+  if(col.dataset.b && col.dataset.b !== item.board_id)
+    return toast('a card stays on the board you sifted it on');
   const to = col.dataset.k;
-  const group = inLane(to).filter(x=>x.id!==item.id);
+  const group = groupIn(col).filter(x=>x.id!==item.id);
   let idx = group.length;
   if(over && over.dataset.id!==item.id){
     const at = group.findIndex(x=>x.id===over.dataset.id);
@@ -922,8 +999,7 @@ async function openDrawer(id){
     clearTimeout(t);
     t = setTimeout(async ()=>{
       try{ await api('/api/ideas/'+id, {method:'PATCH', body: JSON.stringify(patch)});
-           flash();
-           const r=await api(`/api/boards/${encodeURIComponent(B.slug)}/ideas`); ideas=r.ideas||[]; paint(snapshot());
+           flash(); await reload(true);
       }catch(e){ toast(e.message); }
     }, 450);
   };
@@ -956,7 +1032,9 @@ function closeDrawer(){
 }
 scrim.addEventListener('click', closeDrawer);
 board.addEventListener('click', e=>{
+  const go=e.target.closest('[data-go]'); if(go) return choose(go.dataset.go);
   const cp=e.target.closest('[data-copy]'); if(cp) return copyStage(e.shiftKey);
+  const sh=e.target.closest('[data-share]'); if(sh) return shareStage();
   const d=e.target.closest('.col-sift'); if(d) return openSift(d.dataset.scope);
   const c=e.target.closest('.card'); if(c) return openDrawer(c.dataset.id);
   const h=e.target.closest('[data-stage]'); if(h) setStage(h.dataset.stage);
@@ -965,22 +1043,83 @@ board.addEventListener('click', e=>{
 /* ------------------------------ copy out ------------------------------
    Whatever comes out of a sift ends up somewhere else — a message, an issue, a
    slide. Markdown is the format every one of those reads. */
-function stageMarkdown(withBody){
-  const g = showing(stageLane);
-  return `## ${B.name} · ${label(stageLane)}\n\n` + g.map((x,i)=>{
+function listMarkdown(g, withBody){
+  return g.map((x,i)=>{
     let s = `${i+1}. ${x.title}`;
     if(x.note) s += `\n   ${x.note}`;
     if(withBody && x.body) s += `\n\n   ${x.body.trim().replace(/\n/g,'\n   ')}\n`;
     return s;
   }).join('\n') + '\n';
 }
+function stageMarkdown(withBody){
+  if(allMode) return allBoards.map(bd=>
+    `## ${bd.name} · ${labelOf(bd,ALL_LANE)}\n\n` + listMarkdown(kept(bd.id).filter(matches), withBody)
+  ).join('\n');
+  return `## ${B.name} · ${label(stageLane)}\n\n` + listMarkdown(showing(stageLane), withBody);
+}
+const onStage = () => allMode ? ideas.filter(matches) : showing(stageLane);
 async function copyStage(withBody){
-  const n = showing(stageLane).length;
+  const n = onStage().length;
   if(!n) return toast('nothing to copy');
   try{
     await navigator.clipboard.writeText(stageMarkdown(withBody));
     toast(`${n} copied as markdown` + (withBody ? ', bodies and all' : ' · shift for the bodies'));
   }catch(e){ toast('the clipboard refused: '+e.message); }
+}
+
+/* ------------------------------ share ------------------------------
+   Two of these boards exist to be shown, and showing one meant a screenshot.
+   A link is one lane, read-only, revocable — and it is the only thing in pit
+   that answers without the key, so it says so plainly. */
+async function shareStage(){
+  if(allMode) return toast('share one board’s lane, not the union');
+  try{
+    const r = await api(`/api/boards/${encodeURIComponent(B.slug)}/shares`);
+    drawShare((r.shares||[]).find(x=>x.lane===stageLane) || null);
+  }catch(e){ toast(e.message); }
+}
+const shareURL = t => `${location.origin}/s/${t}`;
+function drawShare(sh){
+  openSheet(`<h2>Share ${esc(label(stageLane))}</h2>
+    ${sh ? `<label class="field"><span>Anyone with this link can read it</span>
+        <input id="shUrl" readonly value="${esc(shareURL(sh.token))}"></label>
+      <p class="lbl">${inLane(stageLane).length} card${inLane(stageLane).length===1?'':'s'} — titles, notes and
+        bodies, as they stand. No other lane, no way back into the board.</p>`
+      : `<p class="lbl">A read-only page holding just this lane, for someone who is not you.
+         The link is the whole credential, so hand it out the way you would a key —
+         and revoke it here when it has done its job.</p>`}
+    <div class="sheet-acts">
+      ${sh?'<button class="ghost danger" id="shKill" type="button">Revoke</button>':''}
+      <button class="ghost" data-close="1" type="button">${sh?'Done':'Cancel'}</button>
+      ${sh ? '<button class="go" id="shCopy" type="button">Copy link</button>'
+           : '<button class="go" id="shGo" type="button">Create link</button>'}
+    </div>`, ()=>{
+    const go=$('shGo');
+    if(go) go.addEventListener('click', async ()=>{
+      try{
+        const made = await api(`/api/boards/${encodeURIComponent(B.slug)}/shares`,
+          {method:'POST', body: JSON.stringify({lane: stageLane})});
+        drawShare(made); toast('link created');
+      }catch(e){ toast(e.message); }
+    });
+    const cp=$('shCopy');
+    if(cp) cp.addEventListener('click', async ()=>{
+      try{ await navigator.clipboard.writeText(shareURL(sh.token)); toast('link copied'); }
+      catch(e){ $('shUrl').select(); toast('the clipboard refused — it is selected'); }
+    });
+    const kill=$('shKill');
+    if(kill) kill.addEventListener('click', async ()=>{
+      if(!kill.classList.contains('armed')){
+        kill.classList.add('armed'); kill.textContent = 'Revoke — the link dies. Click again';
+        setTimeout(()=>{ if(kill.isConnected){ kill.classList.remove('armed'); kill.textContent='Revoke'; } }, 5000);
+        return;
+      }
+      try{ await api('/api/shares/'+encodeURIComponent(sh.token), {method:'DELETE'});
+           closeSheet(); toast('link revoked'); }
+      catch(e){ toast(e.message); }
+    });
+    if($('shUrl')) $('shUrl').select();
+  });
 }
 
 /* ------------------------------ sift ------------------------------
@@ -1171,6 +1310,7 @@ async function skip(){
 }
 async function undo(){
   if(busy) return;
+  if(allMode) return toast('open a board to take back a call on it');
   busy = true;
   try{
     const it = await api(`/api/boards/${encodeURIComponent(B.slug)}/sift/undo`, {method:'POST'});
@@ -1190,6 +1330,7 @@ async function undo(){
   busy = false;
 }
 function openSift(l){
+  if(allMode) return toast('open a board to sift it');
   scope = l || nextScope();
   if(!scope || !inLane(scope).length) return toast('nothing to sift');
   q = inLane(scope).map(x=>x.id);
@@ -1303,14 +1444,19 @@ function editBoard(){
     });
   });
 }
-bdesc.addEventListener('click', editBoard);
+bdesc.addEventListener('click', ()=>{ if(!allMode) editBoard(); });
 
 /* ------------------------------ routing ------------------------------
    Every view has an address so a board, a card or a sift pass is a link worth
    keeping: #/<board>, #/<board>/<ideaId>, #/<board>/lane/<lane>,
    #/<board>/sift[/<lane>]  */
 function writeHash(){
-  if(routing || !B) return;
+  if(routing) return;
+  if(allMode){
+    if(location.hash !== '#/all'){ routing=true; history.pushState(null,'','#/all'); routing=false; }
+    return;
+  }
+  if(!B) return;
   let h = '#/'+B.slug;
   if(siftEl.classList.contains('on')) h += '/sift'+(scope&&scope!=='unsorted'?'/'+scope:'');
   else if(sel) h += '/'+sel;
@@ -1319,6 +1465,14 @@ function writeHash(){
 }
 async function readHash(){
   const parts = (location.hash||'').replace(/^#\/?/,'').split('/').filter(Boolean);
+  if(parts[0]==='all'){
+    if(siftEl.classList.contains('on')){
+      siftEl.classList.remove('on'); siftEl.setAttribute('aria-hidden','true');
+    }
+    if(sel) closeDrawer();
+    await loadAll(); paint(null);
+    return;
+  }
   const slug = parts[0] && boards.some(b=>b.slug===parts[0]) ? parts[0] : (boards[0]&&boards[0].slug);
   if(!slug){ board.innerHTML = '<div style="padding:40px;color:var(--muted)">No boards yet. Create one to start.</div>'; return; }
   if(!B || B.slug!==slug) await loadBoard(slug);
@@ -1349,6 +1503,16 @@ function renderPop(){
   popRows = boards.filter(b =>
     !query || b.name.toLowerCase().includes(query) || (b.description||'').toLowerCase().includes(query));
   if(popAt >= popRows.length) popAt = Math.max(0, popRows.length-1);
+
+  // The picker was already the only across-boards view there is; this is the
+  // one row that answers the across-boards question rather than picking one.
+  const total = boards.reduce((n,b)=>n+((b.counts&&b.counts.in)||0), 0);
+  popAll.hidden = !!query;
+  popAll.innerHTML = query ? '' : `<button class="pop-row every${allMode?' at':''}" type="button" data-all="1">
+      <span class="dot"></span>
+      <span class="mid"><span class="nm">everything${allMode?'<em>here</em>':''}</span>
+        <span class="ds">every board's ${esc(ALL_LANE)} lane, on one stage</span></span>
+      <span class="ct">${total} kept</span></button>`;
 
   popList.innerHTML = popRows.length ? popRows.map((b,i)=>{
     const c = b.counts||{}, waiting = c.unsorted||0, here = B && b.slug===B.slug;
@@ -1381,7 +1545,7 @@ function closePop(){
 }
 async function choose(slug){
   closePop();
-  if(B && slug===B.slug) return;
+  if(!allMode && B && slug===B.slug) return;
   sel=null; drawer.classList.remove('on'); scrim.classList.remove('on');
   try{ await loadBoard(slug); paint(null); writeHash(); }
   catch(e){ toast(e.message); }
@@ -1389,6 +1553,10 @@ async function choose(slug){
 boardBtn.addEventListener('click', ()=> boardPop.hidden ? openPop() : closePop());
 popList.addEventListener('click', e=>{
   const r = e.target.closest('.pop-row'); if(r) choose(r.dataset.slug);
+});
+popAll.addEventListener('click', async ()=>{
+  closePop();
+  try{ await loadAll(); paint(null); writeHash(); }catch(e){ toast(e.message); }
 });
 popQ.addEventListener('input', ()=>{ popAt=0; renderPop(); });
 popQ.addEventListener('keydown', e=>{

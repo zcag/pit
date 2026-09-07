@@ -7,7 +7,9 @@
 package store
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -74,6 +76,15 @@ CREATE TABLE IF NOT EXISTS sifts (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sifts_board ON sifts(board_id, created_at);
+
+-- A share is one lane of one board, readable by anyone holding the token.
+CREATE TABLE IF NOT EXISTS shares (
+  token      TEXT PRIMARY KEY,
+  board_id   TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  lane       TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_shares_board ON shares(board_id);
 
 -- Shelved with the duel (see README). The rows are kept: if pairwise ranking
 -- comes back it comes back with its history, not from zero.
@@ -798,6 +809,86 @@ func scanComments(rows *sql.Rows) ([]model.Comment, error) {
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+/* --------------------------------- shares ---------------------------------- */
+
+// CreateShare mints a link for one lane. A board+lane already shared keeps its
+// existing token, so pressing the button twice does not scatter live URLs.
+func (s *Store) CreateShare(boardID string, lane model.Lane) (model.Share, error) {
+	if !model.ValidLane(lane) {
+		return model.Share{}, fmt.Errorf("%q is not a lane", lane)
+	}
+	sh, err := s.shareOf(boardID, lane)
+	if err == nil {
+		return sh, nil
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return model.Share{}, err
+	}
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return model.Share{}, err
+	}
+	sh = model.Share{Token: base64.RawURLEncoding.EncodeToString(b), BoardID: boardID,
+		Lane: lane, CreatedAt: time.Now().UTC()}
+	_, err = s.db.Exec(`INSERT INTO shares (token,board_id,lane,created_at) VALUES (?,?,?,?)`,
+		sh.Token, sh.BoardID, string(sh.Lane), now())
+	return sh, err
+}
+
+func (s *Store) shareOf(boardID string, lane model.Lane) (model.Share, error) {
+	return scanShare(s.db.QueryRow(
+		`SELECT token,board_id,lane,created_at FROM shares WHERE board_id = ? AND lane = ?`,
+		boardID, string(lane)))
+}
+
+func (s *Store) Share(token string) (model.Share, error) {
+	return scanShare(s.db.QueryRow(
+		`SELECT token,board_id,lane,created_at FROM shares WHERE token = ?`, token))
+}
+
+func (s *Store) SharesFor(boardID string) ([]model.Share, error) {
+	rows, err := s.db.Query(`SELECT token,board_id,lane,created_at FROM shares
+	                          WHERE board_id = ? ORDER BY created_at`, boardID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.Share
+	for rows.Next() {
+		sh, err := scanShare(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sh)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteShare(token string) error {
+	res, err := s.db.Exec(`DELETE FROM shares WHERE token = ?`, token)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func scanShare(sc scanner) (model.Share, error) {
+	var sh model.Share
+	var lane, created string
+	err := sc.Scan(&sh.Token, &sh.BoardID, &lane, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return sh, ErrNotFound
+	}
+	if err != nil {
+		return sh, err
+	}
+	sh.Lane, sh.CreatedAt = model.Lane(lane), parseTime(created)
+	return sh, nil
 }
 
 /* ---------------------------------- views ---------------------------------- */

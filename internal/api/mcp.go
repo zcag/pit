@@ -152,6 +152,18 @@ var mcpTools = []tool{
 		}, "id", "text"),
 	},
 	{
+		Name: "argue_against",
+		Description: "Load a board's 'in' lane together with the brief for attacking it. " +
+			"Everything else an agent writes here is advocacy for adding, so nothing in the " +
+			"loop ever tests what the owner kept. This call writes nothing itself: it hands " +
+			"back the kept cards and what an objection has to contain, and you then post one " +
+			"per card with `comment`. Invoke it when asked to, not on your own initiative.",
+		InputSchema: obj(map[string]any{
+			"board": str("Board slug or id"),
+			"lane":  str("Which lane to attack; defaults to 'in'"),
+		}, "board"),
+	},
+	{
 		Name: "top",
 		Description: "The short answer: what is in the 'in' lane, in the owner's order, plus how " +
 			"much is still unsorted. A big unsorted count means this answer is provisional.",
@@ -347,6 +359,25 @@ func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
 		}
 		return jsonText(c)
 
+	case "argue_against":
+		b, err := st.Board(argStr(a, "board"))
+		if err != nil {
+			return "", err
+		}
+		lane := model.Lane(argStr(a, "lane"))
+		if lane == "" {
+			lane = model.In
+		}
+		ideas, err := st.ListIdeas(b.ID)
+		if err != nil {
+			return "", err
+		}
+		return jsonText(map[string]any{
+			"board": b.Slug, "lane": lane, "label": b.Label(lane),
+			"brief": argueBrief,
+			"ideas": store.InLane(ideas, lane),
+		})
+
 	case "top":
 		b, err := st.Board(argStr(a, "board"))
 		if err != nil {
@@ -364,6 +395,17 @@ func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
 	}
 	return "", fmt.Errorf("unknown tool: %s", name)
 }
+
+// argueBrief is the whole point of argue_against: the tool has no model of its
+// own, so what it can usefully hand back is the lane plus the shape an honest
+// objection takes.
+const argueBrief = `Post exactly one comment per card below, with ` + "`comment`" + `, each containing:
+  - what would have to be true for this to be worth doing — stated as a condition that could turn out false;
+  - what it competes with: which of the other cards on this list it takes time from;
+  - what it quietly costs: the maintenance, the surface, the thing it makes harder later.
+One honest objection, not a balanced review — the case for the card is already on the card.
+Say nothing you do not believe: "this one survives, and here is the strongest thing against it anyway"
+is a good comment. Do not sift, and do not move anything: which lane a card rests in is the owner's call.`
 
 func jsonText(v any) (string, error) {
 	b, err := json.MarshalIndent(v, "", "  ")

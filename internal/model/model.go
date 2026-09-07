@@ -99,6 +99,17 @@ type Comment struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// Share is a read-only public view of one lane of one board — the way a
+// shortlist leaves this machine without becoming a screenshot. The token is
+// the whole credential, so it is long and random, and revoking one is deleting
+// its row.
+type Share struct {
+	Token     string    `json:"token"`
+	BoardID   string    `json:"board_id"`
+	Lane      Lane      `json:"lane"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // Sift is one decision: a vote, or a drag. Append-only — an undo writes Voided
 // and restores From/FromPos, so the log stays a faithful record of what was
 // actually decided and undo is a one-row write.
