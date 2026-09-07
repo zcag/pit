@@ -346,7 +346,7 @@ func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
 				return "", fmt.Errorf("only the owner sifts: an agent may move a card to 'unsorted' " +
 					"to ask for a decision, but not into in/maybe/unsure/out. Argue for it with `comment` instead")
 			}
-			if it, err = st.Move(it.BoardID, it.ID, model.Unsorted, nil); err != nil {
+			if it, err = st.Move(it.BoardID, it.ID, model.Unsorted, nil, model.NoReason); err != nil {
 				return "", err
 			}
 		}

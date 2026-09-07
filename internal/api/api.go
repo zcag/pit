@@ -215,7 +215,8 @@ func (s *Server) listBoards(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, v)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"boards": out, "lanes": model.Lanes})
+	writeJSON(w, http.StatusOK, map[string]any{"boards": out, "lanes": model.Lanes,
+		"reasons": model.Reasons})
 }
 
 // everything is the one question that does not respect board boundaries: what
@@ -393,7 +394,7 @@ func (s *Server) patchIdea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Lane != nil && *in.Lane != string(it.Lane) {
-		it, err = s.cfg.Store.Move(it.BoardID, it.ID, model.Lane(*in.Lane), nil)
+		it, err = s.cfg.Store.Move(it.BoardID, it.ID, model.Lane(*in.Lane), nil, model.NoReason)
 		if err != nil {
 			fail(w, err)
 			return
@@ -415,8 +416,9 @@ func (s *Server) deleteIdea(w http.ResponseWriter, r *http.Request) {
 // chose where in the lane it lands.
 func (s *Server) placeIdea(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Lane string   `json:"lane"`
-		Pos  *float64 `json:"pos"`
+		Lane   string   `json:"lane"`
+		Pos    *float64 `json:"pos"`
+		Reason string   `json:"reason"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
@@ -431,7 +433,7 @@ func (s *Server) placeIdea(w http.ResponseWriter, r *http.Request) {
 	if lane == "" {
 		lane = it.Lane
 	}
-	it, err = s.cfg.Store.Move(it.BoardID, it.ID, lane, in.Pos)
+	it, err = s.cfg.Store.Move(it.BoardID, it.ID, lane, in.Pos, model.Reason(in.Reason))
 	if err != nil {
 		fail(w, err)
 		return
@@ -467,14 +469,15 @@ func (s *Server) sift(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Idea string `json:"idea"`
-		Lane string `json:"lane"`
+		Idea   string `json:"idea"`
+		Lane   string `json:"lane"`
+		Reason string `json:"reason"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
 		return
 	}
-	it, err := s.cfg.Store.Move(b.ID, in.Idea, model.Lane(in.Lane), nil)
+	it, err := s.cfg.Store.Move(b.ID, in.Idea, model.Lane(in.Lane), nil, model.Reason(in.Reason))
 	if err != nil {
 		fail(w, err)
 		return

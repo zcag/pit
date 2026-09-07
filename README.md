@@ -44,7 +44,27 @@ Every board has the same five lanes, and only their display names change:
 | `in` | yes |
 | `maybe` | a real idea, second tier |
 | `unsure` | you looked and could not call it — owed a second pass |
-| `out` | no. Buried, never deleted — a killed idea is what stops you having it again |
+| `out` | off the board. Buried, never deleted — a killed idea is what stops you having it again |
+
+## A burial says how it ended
+
+`out` used to mean two things at once. A card you rejected and a card you built
+both landed there and sat indistinguishable, which is fine for clearing the
+stage and wrong for everything that reads the pile afterwards — including you,
+next month, wondering whether you said no to this or shipped it.
+
+So a burial carries a reason: nothing (the plain no), **`done`** (you built it)
+or **`handed`** (it became work somewhere else — a todo, a ticket, another
+repo). On the board, `D` and `H` on a focused card bury it as one of those in a
+keypress; the drawer's chip sets or corrects it afterwards; `out` shows it on
+the card, and `/done` finds them.
+
+It is deliberately **not** a sixth lane. A lane is somewhere the sift can put a
+card with one key, and "I built this" is not a judgement you make in a queue —
+it is something you record later about a card you already kept. The sift's four
+keys are untouched, and `←` still means no without asking. A reason only exists
+in `out`: dig a card up and it is un-shipped, because it is back to being a
+question.
 
 This used to be a per-board vocabulary of arbitrary length. It isn't any more,
 because a lane you cannot vote into is a lane that fills up and never empties:
@@ -60,8 +80,8 @@ the order you put it is the answer.
 
 ## The log is the truth
 
-Every vote and every drag appends to `sifts` — from lane, to lane, and the
-position it left. Nothing is ever overwritten in place, which makes undo a
+Every vote and every drag appends to `sifts` — from lane, to lane, the position
+it left, and both reasons (the one it recorded and the one it replaced). Nothing is ever overwritten in place, which makes undo a
 one-row write (`voided = 1`, put the card back) rather than a guess, and lets
 `u` walk back a whole pass one card at a time.
 
@@ -80,6 +100,10 @@ the migration, and the git history has the store and UI wiring. If ordering the
 was always meant for, not for the whole dump.
 
 ## Agents
+
+An agent cannot set a reason either, for the same cause: nothing in the tool
+surface reaches `/sift` or `/place`, so "this shipped" stays something you say
+about your own board.
 
 Agents propose, annotate, edit and read. **Agents cannot sift** — there is
 deliberately no tool for it, and `update_idea` will refuse any lane but
@@ -133,7 +157,7 @@ DELETE /api/boards/{board}
 GET    /api/boards/{board}/ideas          best lane first; ?lane= ?source=
 POST   /api/boards/{board}/ideas          bulk add
 GET    /api/boards/{board}/top?k=5        the short answer
-POST   /api/boards/{board}/sift           {idea, lane} — one vote
+POST   /api/boards/{board}/sift           {idea, lane, reason} — one vote
 POST   /api/boards/{board}/sift/undo      void the last call, restore the card
 GET    /api/boards/{board}/log?n=50       what you decided, newest first
 GET    /api/boards/{board}/shares         live share links for this board
@@ -145,7 +169,7 @@ GET    /s/{token}                         the shared lane, rendered — the one 
 GET    /api/ideas/{id}
 PATCH  /api/ideas/{id}                    title, note, body, lane
 DELETE /api/ideas/{id}
-POST   /api/ideas/{id}/place              {lane, pos} — a drag
+POST   /api/ideas/{id}/place              {lane, pos, reason} — a drag, or a burial
 POST   /api/ideas/{id}/comments
 ```
 
@@ -157,7 +181,8 @@ column at the far right: its cards are numbered in your order, wide enough to
 read, and carry the first lines of the body. Clicking any rail lane's header
 puts *it* on the stage — which is how you read the maybes, or the graveyard,
 without leaving the board (`#/<board>/lane/<lane>`). `S` opens the sift, `Esc` leaves
-it, arrows vote, `space` skips, `U` undoes anywhere. `/` filters every lane at
+it, arrows vote, `space` skips, `U` undoes anywhere, and `D` / `H` on a focused
+card bury it as done or handed off. `/` filters every lane at
 once as you type — the graveyard is the pile you actually need to look things
 up in — and `C` copies the stage to the clipboard as numbered markdown (`shift`
 for the bodies too), because whatever comes out of a sift ends up somewhere

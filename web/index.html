@@ -221,6 +221,15 @@ button,input,textarea,select{font:inherit;color:inherit}
 .card .src{width:5px;height:5px;border-radius:50%;background:var(--cold);flex:none}
 .card .src.agent{background:var(--spark)}
 .card .age{margin-left:auto;white-space:nowrap}
+/* A grave with a headstone. Without this `out` says "no" and "shipped" in the
+   same breath, which is fine for clearing the stage and wrong for everything
+   that reads the pile afterwards. */
+.card .why{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.11em;
+  text-transform:uppercase;border:1px solid currentColor;border-radius:3px;padding:1px 4px;
+  color:var(--cold);opacity:.85}
+.card .why.done{color:var(--spark)}
+.stage.is-out .card .f .why,.rail .col[data-k="out"] .card .why{color:var(--cold)}
+.stage.is-out .card .f .why.done,.rail .col[data-k="out"] .card .why.done{color:var(--spark)}
 .card.fresh{animation:land .55s cubic-bezier(.2,.7,.3,1)}
 @keyframes land{from{opacity:0;transform:translateY(-8px);box-shadow:0 0 0 3px var(--spark)}to{opacity:1;transform:none}}
 
@@ -558,6 +567,10 @@ function ago(iso){
 const LANES = ['unsorted','in','maybe','unsure','out'];
 const VOTES = ['in','maybe','unsure','out'];
 const ARROW = {in:'→', maybe:'↑', unsure:'↓', out:'←'};
+/* How a card ended. Only `out` carries one, and only from the board — the
+   sift's left arrow is still one keypress that means no, because "I built
+   this" is not a judgement you make in a queue. */
+const REASON = {done:'done', handed:'handed off'};
 const KEYLANE = {ArrowRight:'in', ArrowLeft:'out', ArrowUp:'maybe', ArrowDown:'unsure'};
 
 const $ = id => document.getElementById(id);
@@ -582,7 +595,7 @@ const inLane = l => ideas.filter(i => i.lane === l);
    between its real neighbours, and the sift still walks the whole pile. */
 let query = '';
 const matches = x => !query ||
-  (x.title+' '+(x.note||'')+' '+(x.body||'')).toLowerCase().includes(query);
+  (x.title+' '+(x.note||'')+' '+(x.body||'')+' '+(REASON[x.reason]||'')).toLowerCase().includes(query);
 const showing = l => inLane(l).filter(matches);
 const byId = id => ideas.find(i => i.id === id);
 const nLive = () => ideas.filter(i => i.lane !== 'out').length;
@@ -634,6 +647,7 @@ const excerpt = (s,n=200) => { s=(s||'').replace(/\s+/g,' ').trim();
 function cardHTML(x, i, big){
   const f = `<div class="f">
       <span class="src ${x.source==='agent'?'agent':''}" title="${x.source==='agent'?'from an agent':'yours'}"></span>
+      ${x.reason?`<span class="why ${x.reason==='done'?'done':''}">${REASON[x.reason]||x.reason}</span>`:''}
       ${x.comment_count?`<span title="${x.comment_count} note${x.comment_count===1?'':'s'}">✎${x.comment_count}</span>`:''}
       <span class="age">${ago(x.created_at)}</span>
     </div>`;
@@ -672,7 +686,10 @@ function paint(prev){
         ${all.length&&stageLane!=='out'?`<button class="col-sift" type="button" data-scope="${stageLane}">sift</button>`:''}
         ${g.length?'<button class="col-sift" type="button" data-copy="1" title="Copy this lane as markdown — shift for the bodies too">copy</button>':''}
         ${all.length?'<button class="col-sift" type="button" data-share="1" title="A read-only link to this lane, for someone who is not you">share</button>':''}
-        ${all.length>1?'<span class="col-hint">drag or J/K to order</span>':''}
+        ${all.length?`<span class="col-hint">${
+          all.length>1?'drag or J/K to order':''}${
+          all.length>1&&stageLane!=='out'?' · ':''}${
+          stageLane!=='out'?'D done · H handed off':''}</span>`:''}
       </header>
       <div class="col-body" data-k="${stageLane}">
         ${g.length ? g.map(x=>cardHTML(x,all.indexOf(x),true)).join('')
@@ -797,6 +814,19 @@ board.addEventListener('keydown', async e=>{
     await nudge(c.dataset.id, (e.key==='j'||e.key==='ArrowDown') ? 1 : -1);
     return refocus(c.dataset.id);
   }
+  /* The exits that are not a no. A card leaves `in` because it became real,
+     and saying which — here, in the second you know it — is what stops the
+     graveyard from reading as a pile of rejections. */
+  if(c && /^[dhDH]$/.test(e.key)){
+    e.preventDefault();
+    const reason = e.key.toLowerCase()==='d' ? 'done' : 'handed';
+    const it = byId(c.dataset.id);
+    if(!it) return;
+    if(it.lane==='out' && it.reason===reason) return;
+    await move(c.dataset.id, 'out', undefined, reason);
+    toast(`buried as ${REASON[reason]} — u puts it back`);
+    return;
+  }
   if(c && e.key==='Enter'){ e.preventDefault(); openDrawer(c.dataset.id); }
 });
 function refocus(id){
@@ -836,11 +866,12 @@ async function dropOn(item, col, clientY, over){
   await move(item.id, to, between(group[idx-1], group[idx]));
 }
 
-async function move(id, lane, pos){
+async function move(id, lane, pos, reason){
   const prev = snapshot();
   const it = byId(id); if(!it) return;
   try{
-    const r = await api(`/api/ideas/${id}/place`, {method:'POST', body: JSON.stringify({lane, pos})});
+    const r = await api(`/api/ideas/${id}/place`,
+      {method:'POST', body: JSON.stringify({lane, pos, reason})});
     Object.assign(it, r);
     ideas.sort(order);
     paint(prev);
@@ -958,6 +989,10 @@ async function openDrawer(id){
   drawer.innerHTML = `
   <div class="dw-top">
     <select class="lanechip" id="dwLane">${LANES.map(k=>`<option value="${k}"${k===x.lane?' selected':''}>${esc(label(k))}</option>`).join('')}</select>
+    <select class="lanechip" id="dwReason"${x.lane==='out'?'':' hidden'} title="How this one ended">
+      <option value=""${x.reason?'':' selected'}>no</option>
+      ${Object.keys(REASON).map(k=>`<option value="${k}"${k===x.reason?' selected':''}>${REASON[k]}</option>`).join('')}
+    </select>
     <span class="srcchip ${x.source==='agent'?'agent':''}"><i></i>${x.source==='agent'?'from an agent':'yours'}</span>
     <button class="dw-x" id="dwX" type="button" aria-label="Close">×</button>
   </div>
@@ -965,7 +1000,7 @@ async function openDrawer(id){
     <textarea class="dw-title" id="dwTitle" rows="1">${esc(x.title)}</textarea>
     <textarea class="dw-note" id="dwNote" rows="1" placeholder="one line — what it is">${esc(x.note)}</textarea>
     <div class="dw-stats">
-      <div><dt>lane</dt><dd>${esc(label(x.lane))}</dd></div>
+      <div><dt>lane</dt><dd>${esc(label(x.lane))}${x.reason?` · ${REASON[x.reason]}`:''}</dd></div>
       <div><dt>added</dt><dd>${ago(x.created_at)} ago</dd></div>
       <div><dt>from</dt><dd>${x.source==='agent'?'agent':'me'}</dd></div>
     </div>
@@ -1008,6 +1043,7 @@ async function openDrawer(id){
   BD.addEventListener('input', ()=>save({body:BD.value}));
 
   $('dwLane').addEventListener('change', async e=>{ await move(id, e.target.value); openDrawer(id); });
+  $('dwReason').addEventListener('change', async e=>{ await move(id, 'out', undefined, e.target.value); openDrawer(id); });
   $('dwX').addEventListener('click', closeDrawer);
   $('dwBury').addEventListener('click', async ()=>{
     await move(id, x.lane==='out' ? 'unsorted' : 'out'); closeDrawer();
@@ -1046,6 +1082,7 @@ board.addEventListener('click', e=>{
 function listMarkdown(g, withBody){
   return g.map((x,i)=>{
     let s = `${i+1}. ${x.title}`;
+    if(x.reason) s += ` — ${REASON[x.reason]||x.reason}`;
     if(x.note) s += `\n   ${x.note}`;
     if(withBody && x.body) s += `\n\n   ${x.body.trim().replace(/\n/g,'\n   ')}\n`;
     return s;

@@ -141,7 +141,7 @@ func TestSiftMovesAndAppendsToTheLane(t *testing.T) {
 	ids := add(t, s, b, "one", "two", "three")
 
 	for _, i := range []int{2, 0} { // vote three, then one
-		if _, err := s.Move(b.ID, ids[i].ID, model.In, nil); err != nil {
+		if _, err := s.Move(b.ID, ids[i].ID, model.In, nil, model.NoReason); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -166,10 +166,10 @@ func TestUndoWalksBackDecisions(t *testing.T) {
 	b := board(t, s)
 	ids := add(t, s, b, "one", "two")
 
-	if _, err := s.Move(b.ID, ids[0].ID, model.Out, nil); err != nil {
+	if _, err := s.Move(b.ID, ids[0].ID, model.Out, nil, model.NoReason); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Move(b.ID, ids[1].ID, model.In, nil); err != nil {
+	if _, err := s.Move(b.ID, ids[1].ID, model.In, nil, model.NoReason); err != nil {
 		t.Fatal(err)
 	}
 
@@ -199,13 +199,13 @@ func TestPlaceOrdersWithinALane(t *testing.T) {
 	b := board(t, s)
 	ids := add(t, s, b, "one", "two", "three")
 	for _, it := range ids {
-		if _, err := s.Move(b.ID, it.ID, model.In, nil); err != nil {
+		if _, err := s.Move(b.ID, it.ID, model.In, nil, model.NoReason); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// Drag "three" between "one" and "two".
 	mid := (ids[0].Pos + ids[1].Pos) / 2
-	got, err := s.Move(b.ID, ids[2].ID, model.In, &mid)
+	got, err := s.Move(b.ID, ids[2].ID, model.In, &mid, model.NoReason)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestMoveRejectsAForeignIdea(t *testing.T) {
 		t.Fatal(err)
 	}
 	ids := add(t, s, a, "one")
-	if _, err := s.Move(other.ID, ids[0].ID, model.In, nil); err == nil {
+	if _, err := s.Move(other.ID, ids[0].ID, model.In, nil, model.NoReason); err == nil {
 		t.Error("an idea was sifted on a board it is not on")
 	}
 }
@@ -267,7 +267,7 @@ func TestListIdeasReadsBestLaneFirst(t *testing.T) {
 	b := board(t, s)
 	ids := add(t, s, b, "queued", "buried", "shortlisted", "second")
 	for i, lane := range map[int]model.Lane{1: model.Out, 2: model.In, 3: model.Maybe} {
-		if _, err := s.Move(b.ID, ids[i].ID, lane, nil); err != nil {
+		if _, err := s.Move(b.ID, ids[i].ID, lane, nil, model.NoReason); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -390,5 +390,69 @@ func TestSlugify(t *testing.T) {
 		if got := Slugify(in); got != want {
 			t.Errorf("Slugify(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// A burial says how a card ended, and only a burial does: the lane says it is
+// off the board, the reason says whether that is a no or a shipped thing.
+func TestMoveReason(t *testing.T) {
+	s := open(t)
+	b := model.Board{Name: "Reasons"}
+	if err := s.CreateBoard(&b); err != nil {
+		t.Fatal(err)
+	}
+	ids, err := s.AddIdeas(b.ID, []model.Idea{{Title: "built it"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := ids[0].ID
+
+	if _, err := s.Move(b.ID, id, model.In, nil, model.NoReason); err != nil {
+		t.Fatal(err)
+	}
+	it, err := s.Move(b.ID, id, model.Out, nil, model.Done)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Reason != model.Done {
+		t.Errorf("reason = %q, want %q", it.Reason, model.Done)
+	}
+
+	// Undo takes back the whole state, not just the lane.
+	if it, err = s.UndoLast(b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if it.Lane != model.In || it.Reason != model.NoReason {
+		t.Errorf("after undo: lane=%q reason=%q, want in and no reason", it.Lane, it.Reason)
+	}
+
+	// Digging a card up un-ships it: a reason is meaningless anywhere but out.
+	if _, err = s.Move(b.ID, id, model.Out, nil, model.Handed); err != nil {
+		t.Fatal(err)
+	}
+	if it, err = s.Move(b.ID, id, model.Unsorted, nil, model.Done); err != nil {
+		t.Fatal(err)
+	}
+	if it.Reason != model.NoReason {
+		t.Errorf("reason survived a move out of out: %q", it.Reason)
+	}
+
+	if _, err := s.Move(b.ID, id, model.Out, nil, model.Reason("shipped-ish")); err == nil {
+		t.Error("an unknown reason was accepted")
+	}
+
+	// And the log keeps what each move recorded.
+	log, err := s.SiftLog(b.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buried int
+	for _, sf := range log {
+		if sf.To == model.Out && sf.Reason != model.NoReason {
+			buried++
+		}
+	}
+	if buried != 1 {
+		t.Errorf("log has %d reasoned burials, want 1 (the undone one is voided)", buried)
 	}
 }

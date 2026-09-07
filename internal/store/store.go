@@ -27,7 +27,8 @@ type Store struct{ db *sql.DB }
 
 // schemaVersion 2 replaced the per-board bucket vocabulary with the fixed lane
 // spine and made the sift, not the duel, the thing that moves a card.
-const schemaVersion = 2
+// 3 gave a burial a reason, so `out` can tell rejection from completion.
+const schemaVersion = 3
 
 const schema = `
 CREATE TABLE IF NOT EXISTS boards (
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS ideas (
   lane       TEXT NOT NULL,
   source     TEXT NOT NULL,
   pos        REAL NOT NULL,
+  reason     TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -72,6 +74,8 @@ CREATE TABLE IF NOT EXISTS sifts (
   from_lane  TEXT NOT NULL,
   to_lane    TEXT NOT NULL,
   from_pos   REAL NOT NULL,
+  reason      TEXT NOT NULL DEFAULT '',
+  from_reason TEXT NOT NULL DEFAULT '',
   voided     INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
@@ -147,7 +151,37 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	// v3: additive, so it is an ALTER rather than a rebuild. CREATE TABLE IF NOT
+	// EXISTS never touches a table that already exists, which is why a new
+	// column needs a step here and not just a line in the schema.
+	for _, c := range []struct{ table, col string }{
+		{"ideas", "reason"}, {"sifts", "reason"}, {"sifts", "from_reason"},
+	} {
+		if err := s.addColumn(c.table, c.col, "TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
+	}
 	_, err = s.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion))
+	return err
+}
+
+// addColumn is a no-op on a database that does not have the table yet (a fresh
+// one, where the schema below creates it with the column already) or already
+// has the column.
+func (s *Store) addColumn(table, col, decl string) error {
+	var n int
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		return nil
+	}
+	has, err := s.hasColumn(table, col)
+	if err != nil || has {
+		return err
+	}
+	_, err = s.db.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s`, table, col, decl))
 	return err
 }
 
@@ -286,8 +320,8 @@ func (s *Store) migrateBucketsToLanes() error {
 			lane = model.Unsorted
 		}
 		if _, err := tx.Exec(
-			`INSERT INTO ideas (id,board_id,title,note,body,lane,source,pos,created_at,updated_at)
-			 SELECT id,board_id,title,note,body,?,source,?,created_at,updated_at FROM ideas_v1 WHERE id = ?`,
+			`INSERT INTO ideas (id,board_id,title,note,body,lane,source,pos,reason,created_at,updated_at)
+			 SELECT id,board_id,title,note,body,?,source,?,'',created_at,updated_at FROM ideas_v1 WHERE id = ?`,
 			string(lane), seq[r.board], r.id); err != nil {
 			return err
 		}
@@ -553,7 +587,7 @@ func tailPos(q execQuerier, boardID string, lane model.Lane) (float64, error) {
 
 func (s *Store) ListIdeas(boardID string) ([]model.Idea, error) {
 	rows, err := s.db.Query(
-		`SELECT id,board_id,title,note,body,lane,source,pos,created_at,updated_at
+		`SELECT id,board_id,title,note,body,lane,source,pos,reason,created_at,updated_at
 		 FROM ideas WHERE board_id = ? ORDER BY `+laneOrder, boardID)
 	if err != nil {
 		return nil, err
@@ -605,7 +639,7 @@ func (s *Store) threads(boardID string) (map[string][]model.Comment, error) {
 
 func (s *Store) Idea(id string) (model.Idea, error) {
 	row := s.db.QueryRow(
-		`SELECT id,board_id,title,note,body,lane,source,pos,created_at,updated_at
+		`SELECT id,board_id,title,note,body,lane,source,pos,reason,created_at,updated_at
 		 FROM ideas WHERE id = ?`, id)
 	it, err := scanIdea(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -621,12 +655,12 @@ func (s *Store) Idea(id string) (model.Idea, error) {
 
 func scanIdea(sc scanner) (model.Idea, error) {
 	var it model.Idea
-	var lane, src, created, updated string
+	var lane, src, reason, created, updated string
 	if err := sc.Scan(&it.ID, &it.BoardID, &it.Title, &it.Note, &it.Body, &lane, &src,
-		&it.Pos, &created, &updated); err != nil {
+		&it.Pos, &reason, &created, &updated); err != nil {
 		return it, err
 	}
-	it.Lane, it.Source = model.Lane(lane), model.Source(src)
+	it.Lane, it.Source, it.Reason = model.Lane(lane), model.Source(src), model.Reason(reason)
 	it.CreatedAt, it.UpdatedAt = parseTime(created), parseTime(updated)
 	return it, nil
 }
@@ -676,7 +710,10 @@ func (s *Store) DeleteIdea(id string) error {
 // end of its new lane, so a session reads in the order you decided it) and a
 // drag (pos given — between its new neighbours) are the same write, logged the
 // same way, undone the same way.
-func (s *Store) Move(boardID, ideaID string, lane model.Lane, pos *float64) (model.Idea, error) {
+//
+// reason records how a card ended and is only kept on the way into `out`; any
+// other destination clears it, so digging a card up un-ships it.
+func (s *Store) Move(boardID, ideaID string, lane model.Lane, pos *float64, reason model.Reason) (model.Idea, error) {
 	it, err := s.Idea(ideaID)
 	if err != nil {
 		return it, err
@@ -687,6 +724,12 @@ func (s *Store) Move(boardID, ideaID string, lane model.Lane, pos *float64) (mod
 	if !model.ValidLane(lane) {
 		return it, fmt.Errorf("%q is not a lane; lanes are unsorted, in, maybe, unsure, out", lane)
 	}
+	if !model.ValidReason(reason) {
+		return it, fmt.Errorf("%q is not a reason; a burial is done, handed, or nothing", reason)
+	}
+	if lane != model.Out {
+		reason = model.NoReason
+	}
 
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -694,8 +737,8 @@ func (s *Store) Move(boardID, ideaID string, lane model.Lane, pos *float64) (mod
 	}
 	defer tx.Rollback()
 
-	from, fromPos := it.Lane, it.Pos
-	it.Lane = lane
+	from, fromPos, fromReason := it.Lane, it.Pos, it.Reason
+	it.Lane, it.Reason = lane, reason
 	if pos != nil {
 		it.Pos = *pos
 	} else {
@@ -703,13 +746,15 @@ func (s *Store) Move(boardID, ideaID string, lane model.Lane, pos *float64) (mod
 			return it, err
 		}
 	}
-	if _, err := tx.Exec(`INSERT INTO sifts (id,board_id,idea_id,from_lane,to_lane,from_pos,voided,created_at)
-	                      VALUES (?,?,?,?,?,?,0,?)`,
-		newID(), boardID, ideaID, string(from), string(lane), fromPos, now()); err != nil {
+	if _, err := tx.Exec(`INSERT INTO sifts (id,board_id,idea_id,from_lane,to_lane,from_pos,
+	                                        reason,from_reason,voided,created_at)
+	                      VALUES (?,?,?,?,?,?,?,?,0,?)`,
+		newID(), boardID, ideaID, string(from), string(lane), fromPos,
+		string(reason), string(fromReason), now()); err != nil {
 		return it, err
 	}
-	if _, err := tx.Exec(`UPDATE ideas SET lane=?,pos=?,updated_at=? WHERE id=?`,
-		string(it.Lane), it.Pos, now(), it.ID); err != nil {
+	if _, err := tx.Exec(`UPDATE ideas SET lane=?,pos=?,reason=?,updated_at=? WHERE id=?`,
+		string(it.Lane), it.Pos, string(it.Reason), now(), it.ID); err != nil {
 		return it, err
 	}
 	it.UpdatedAt = time.Now().UTC()
@@ -720,12 +765,12 @@ func (s *Store) Move(boardID, ideaID string, lane model.Lane, pos *float64) (mod
 // exactly where it was. It returns the restored idea so a client mid-sift can
 // show it again without reloading the world.
 func (s *Store) UndoLast(boardID string) (model.Idea, error) {
-	var id, ideaID, from string
+	var id, ideaID, from, fromReason string
 	var fromPos float64
-	err := s.db.QueryRow(`SELECT id,idea_id,from_lane,from_pos FROM sifts
+	err := s.db.QueryRow(`SELECT id,idea_id,from_lane,from_pos,from_reason FROM sifts
 	                       WHERE board_id = ? AND voided = 0
 	                       ORDER BY created_at DESC, id DESC LIMIT 1`, boardID).
-		Scan(&id, &ideaID, &from, &fromPos)
+		Scan(&id, &ideaID, &from, &fromPos, &fromReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Idea{}, ErrNotFound
 	}
@@ -740,8 +785,8 @@ func (s *Store) UndoLast(boardID string) (model.Idea, error) {
 	if _, err := tx.Exec(`UPDATE sifts SET voided = 1 WHERE id = ?`, id); err != nil {
 		return model.Idea{}, err
 	}
-	if _, err := tx.Exec(`UPDATE ideas SET lane=?,pos=?,updated_at=? WHERE id=?`,
-		from, fromPos, now(), ideaID); err != nil {
+	if _, err := tx.Exec(`UPDATE ideas SET lane=?,pos=?,reason=?,updated_at=? WHERE id=?`,
+		from, fromPos, fromReason, now(), ideaID); err != nil {
 		return model.Idea{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -755,7 +800,8 @@ func (s *Store) SiftLog(boardID string, limit int) ([]model.Sift, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := s.db.Query(`SELECT id,board_id,idea_id,from_lane,to_lane,from_pos,created_at
+	rows, err := s.db.Query(`SELECT id,board_id,idea_id,from_lane,to_lane,from_pos,
+	                                reason,from_reason,created_at
 	                          FROM sifts WHERE board_id = ? AND voided = 0
 	                          ORDER BY created_at DESC, id DESC LIMIT ?`, boardID, limit)
 	if err != nil {
@@ -765,11 +811,13 @@ func (s *Store) SiftLog(boardID string, limit int) ([]model.Sift, error) {
 	var out []model.Sift
 	for rows.Next() {
 		var sf model.Sift
-		var from, to, created string
-		if err := rows.Scan(&sf.ID, &sf.BoardID, &sf.IdeaID, &from, &to, &sf.FromPos, &created); err != nil {
+		var from, to, reason, fromReason, created string
+		if err := rows.Scan(&sf.ID, &sf.BoardID, &sf.IdeaID, &from, &to, &sf.FromPos,
+			&reason, &fromReason, &created); err != nil {
 			return nil, err
 		}
 		sf.From, sf.To, sf.CreatedAt = model.Lane(from), model.Lane(to), parseTime(created)
+		sf.Reason, sf.FromReason = model.Reason(reason), model.Reason(fromReason)
 		out = append(out, sf)
 	}
 	return out, rows.Err()

@@ -36,6 +36,44 @@ var Lanes = []Lane{Unsorted, In, Maybe, Unsure, Out}
 // Votes is what a sift can put a card into — Lanes minus the queue itself.
 var Votes = []Lane{In, Maybe, Unsure, Out}
 
+// Reason is how a card ended, which only `out` needs: the lane says a card is
+// off the board, and this says whether that is because you said no or because
+// it became real. Empty is the plain no — what out has always meant, and what
+// a sift's left arrow still writes without asking.
+//
+// It is deliberately not a lane. A lane is somewhere the sift can put a card
+// with one key, and "I built this" is not a judgement you make in a queue; it
+// is something you record afterwards about a card you already kept.
+type Reason string
+
+const (
+	NoReason Reason = ""       // no
+	Done     Reason = "done"   // built it
+	Handed   Reason = "handed" // it became work somewhere else
+)
+
+var Reasons = []Reason{NoReason, Done, Handed}
+
+func ValidReason(r Reason) bool {
+	for _, x := range Reasons {
+		if x == r {
+			return true
+		}
+	}
+	return false
+}
+
+// Label is how a reason reads to a person.
+func (r Reason) Label() string {
+	switch r {
+	case Done:
+		return "done"
+	case Handed:
+		return "handed off"
+	}
+	return ""
+}
+
 func ValidLane(l Lane) bool {
 	for _, x := range Lanes {
 		if x == l {
@@ -78,6 +116,9 @@ type Idea struct {
 	Lane    Lane    `json:"lane"`
 	Source  Source  `json:"source"`
 	Pos     float64 `json:"pos"`
+	// Reason is meaningful only while Lane is Out, and is cleared on the way to
+	// any other lane — digging a card up un-ships it.
+	Reason Reason `json:"reason"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -114,12 +155,16 @@ type Share struct {
 // and restores From/FromPos, so the log stays a faithful record of what was
 // actually decided and undo is a one-row write.
 type Sift struct {
-	ID        string    `json:"id"`
-	BoardID   string    `json:"board_id"`
-	IdeaID    string    `json:"idea_id"`
-	From      Lane      `json:"from"`
-	To        Lane      `json:"to"`
-	FromPos   float64   `json:"from_pos"`
-	Voided    bool      `json:"voided"`
-	CreatedAt time.Time `json:"created_at"`
+	ID      string  `json:"id"`
+	BoardID string  `json:"board_id"`
+	IdeaID  string  `json:"idea_id"`
+	From    Lane    `json:"from"`
+	To      Lane    `json:"to"`
+	FromPos float64 `json:"from_pos"`
+	// Reason is what this move recorded; FromReason is what it replaced, so an
+	// undo puts back the whole state and not just the lane.
+	Reason     Reason    `json:"reason"`
+	FromReason Reason    `json:"from_reason"`
+	Voided     bool      `json:"voided"`
+	CreatedAt  time.Time `json:"created_at"`
 }
