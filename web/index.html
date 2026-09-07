@@ -142,6 +142,15 @@ button,input,textarea,select{font:inherit;color:inherit}
 .col.over{background:color-mix(in srgb,var(--spark) 11%,var(--bg))}
 .stage{border-right:1px solid var(--rule)}
 .stage.is-out{background:color-mix(in srgb,var(--bg) 88%,var(--sunk))}
+/* `done` is the one pile you are meant to feel good looking at, so it is not
+   dressed like the graveyard next to it. */
+.col.is-done .col-name{color:var(--spark)}
+/* The chip cannot live inside .t — that is a -webkit-box, so a span in it
+   becomes a full-width box item on its own line. It is a sibling, and the card
+   becomes a row to hold the two side by side. */
+.card.slim.marked{display:flex;align-items:flex-start;gap:7px}
+.card.slim .why{flex:none;margin-top:1px}
+.card.slim .t{flex:1;min-width:0}
 /* Everything kept, on one stage. The question "what have I committed to" does
    not respect board boundaries — it is the union, and it is short by
    construction. Each board keeps its own stage; nothing is merged or ranked
@@ -566,6 +575,11 @@ function ago(iso){
    one, which is what lets four keys cover the whole vocabulary. */
 const LANES = ['unsorted','in','maybe','unsure','out'];
 const VOTES = ['in','maybe','unsure','out'];
+/* `done` is a section, not a lane. The model has five lanes because the sift
+   has four keys and a queue; the view has six columns because a shipped card
+   and a rejected one both live in `out` and must not read the same. Everything
+   that decides — the sift, the vote counts, the API — still sees five. */
+const SECTIONS = ['unsorted','in','maybe','unsure','done','out'];
 const ARROW = {in:'→', maybe:'↑', unsure:'↓', out:'←'};
 /* How a card ended. Only `out` carries one, and only from the board — the
    sift's left arrow is still one keypress that means no, because "I built
@@ -593,10 +607,15 @@ const inLane = l => ideas.filter(i => i.lane === l);
 /* The filter is a lens on the board, never on the truth: inLane stays the lane
    as it is, and only what gets painted is narrowed. So a drop still lands
    between its real neighbours, and the sift still walks the whole pile. */
+// `out` shows what you said no to; `done` shows what left because it became
+// real. Same lane underneath, told apart by the reason on the burial.
+const section = k => k==='done' ? inLane('out').filter(x=>x.reason)
+                   : k==='out'  ? inLane('out').filter(x=>!x.reason)
+                   : inLane(k);
 let query = '';
 const matches = x => !query ||
   (x.title+' '+(x.note||'')+' '+(x.body||'')+' '+(REASON[x.reason]||'')).toLowerCase().includes(query);
-const showing = l => inLane(l).filter(matches);
+const showing = l => section(l).filter(matches);
 const byId = id => ideas.find(i => i.id === id);
 const nLive = () => ideas.filter(i => i.lane !== 'out').length;
 
@@ -651,8 +670,10 @@ function cardHTML(x, i, big){
       ${x.comment_count?`<span title="${x.comment_count} note${x.comment_count===1?'':'s'}">✎${x.comment_count}</span>`:''}
       <span class="age">${ago(x.created_at)}</span>
     </div>`;
-  if(!big) return `<article class="card slim${fresh.has(x.id)?' fresh':''}${sel===x.id?' sel':''}"
-    draggable="true" tabindex="0" data-id="${x.id}"><p class="t">${esc(x.title)}</p></article>`;
+  if(!big) return `<article class="card slim${x.reason?' marked':''}${fresh.has(x.id)?' fresh':''}${sel===x.id?' sel':''}"
+    draggable="true" tabindex="0" data-id="${x.id}">${
+      x.reason?`<span class="why ${x.reason==='done'?'done':''}">${REASON[x.reason]||x.reason}</span>`:''
+    }<p class="t">${esc(x.title)}</p></article>`;
   return `<article class="card big${fresh.has(x.id)?' fresh':''}${sel===x.id?' sel':''}"
     draggable="true" tabindex="0" data-id="${x.id}">
     <span class="num">${i+1}</span>
@@ -667,43 +688,48 @@ function snapshot(){
 function emptyLine(k, filtered){
   if(filtered) return `No match for “${esc(query)}” in ${esc(label(k))}.`;
   if(k==='unsorted') return 'Nothing waiting. Drop ideas here — or let an agent.';
+  if(k==='done') return 'Nothing shipped yet. D on a card marks it done, H hands it off.';
   if(k==='out') return 'Nothing buried yet.';
   if(k===stageLane) return `Nothing in ${esc(label(k))} yet. Sift the queue and what you keep lands here.`;
   return 'Empty.';
+}
+// The board's only key legend, and only where the keys apply.
+function hint(k, n){
+  const parts = [];
+  if(n > 1) parts.push('drag or J/K to order');
+  if(LANES.includes(k) && k !== 'out') parts.push('D done · H handed off');
+  return parts.length ? `<span class="col-hint">${parts.join(' · ')}</span>` : '';
 }
 // While filtering, a lane says how much of it you are looking at.
 const laneCount = (all, some) => query ? `${some.length}/${all.length}` : String(all.length);
 function paint(prev){
   if(allMode) return paintAll(prev);
   if(!B) return;
-  if(!LANES.includes(stageLane)) stageLane = 'in';
+  if(!SECTIONS.includes(stageLane)) stageLane = 'in';
   const scroll={}; board.querySelectorAll('.col-body').forEach(b=>scroll[b.dataset.k]=b.scrollTop);
 
-  const all = inLane(stageLane), g = all.filter(matches);
+  const all = section(stageLane), g = all.filter(matches);
   const stage = `<section class="col stage${stageLane==='out'?' is-out':''}" data-k="${stageLane}">
       <header class="col-head">
         <span class="col-name">${esc(label(stageLane))}</span><span class="col-n">${laneCount(all,g)}</span>
-        ${all.length&&stageLane!=='out'?`<button class="col-sift" type="button" data-scope="${stageLane}">sift</button>`:''}
+        ${all.length&&LANES.includes(stageLane)&&stageLane!=='out'?`<button class="col-sift" type="button" data-scope="${stageLane}">sift</button>`:''}
         ${g.length?'<button class="col-sift" type="button" data-copy="1" title="Copy this lane as markdown — shift for the bodies too">copy</button>':''}
         ${all.length?'<button class="col-sift" type="button" data-share="1" title="A read-only link to this lane, for someone who is not you">share</button>':''}
-        ${all.length?`<span class="col-hint">${
-          all.length>1?'drag or J/K to order':''}${
-          all.length>1&&stageLane!=='out'?' · ':''}${
-          stageLane!=='out'?'D done · H handed off':''}</span>`:''}
+        ${hint(stageLane, all.length)}
       </header>
       <div class="col-body" data-k="${stageLane}">
         ${g.length ? g.map(x=>cardHTML(x,all.indexOf(x),true)).join('')
                    : `<div class="col-empty">${emptyLine(stageLane, all.length>0)}</div>`}
       </div>
-      ${stageLane==='out'?'':`<div class="quick"><input data-lane="${stageLane}" placeholder="Add to ${esc(label(stageLane))}…" autocomplete="off"></div>`}
+      ${LANES.includes(stageLane)&&stageLane!=='out'?`<div class="quick"><input data-lane="${stageLane}" placeholder="Add to ${esc(label(stageLane))}…" autocomplete="off"></div>`:''}
     </section>`;
 
-  const rail = LANES.filter(k=>k!==stageLane).map(k=>{
-    const l = inLane(k), v = showing(k);
-    return `<section class="col" data-k="${k}">
+  const rail = SECTIONS.filter(k=>k!==stageLane).map(k=>{
+    const l = section(k), v = showing(k);
+    return `<section class="col${k==='done'?' is-done':''}" data-k="${k}">
       <header class="col-head" role="button" tabindex="0" data-stage="${k}">
         <span class="col-name">${esc(label(k))}</span><span class="col-n">${laneCount(l,v)}</span>
-        ${l.length&&k!=='out'?`<button class="col-sift" type="button" data-scope="${k}">sift</button>`:''}
+        ${l.length&&LANES.includes(k)&&k!=='out'?`<button class="col-sift" type="button" data-scope="${k}">sift</button>`:''}
       </header>
       <div class="col-body" data-k="${k}">
         ${v.length ? v.map(x=>cardHTML(x,0,false)).join('')
@@ -752,14 +778,14 @@ function paintAll(prev){
   drawStat();
 }
 function setStage(k){
-  if(!LANES.includes(k) || k===stageLane) return;
+  if(!SECTIONS.includes(k) || k===stageLane) return;
   stageLane = k; paint(null); writeHash();
 }
 function drawStat(){
   statEl.textContent = query
     ? `${ideas.filter(matches).length} of ${ideas.length} match`
     : allMode ? `${ideas.length} kept · ${allBoards.length} boards`
-              : `${nLive()} live · ${inLane('out').length} out`;
+              : `${nLive()} live · ${section('done').length} done · ${section('out').length} out`;
   if(allMode){
     $('siftN').textContent = 0; $('siftWhat').textContent = 'Sift';
     $('siftBtn').disabled = true; $('siftBtn').title = 'open a board to sift it';
@@ -800,7 +826,8 @@ board.addEventListener('keydown', async e=>{
   const c = e.target.closest('.card');
   if(c && (e.key==='ArrowLeft'||e.key==='ArrowRight')){
     e.preventDefault();
-    const i = LANES.indexOf(c.closest('.col').dataset.k);
+    const k = c.closest('.col').dataset.k;
+    const i = LANES.indexOf(k==='done' ? 'out' : k);
     const to = e.key==='ArrowRight' ? i+1 : i-1;
     if(to<0||to>=LANES.length) return;
     await move(c.dataset.id, LANES[to]);
@@ -838,12 +865,13 @@ async function nudge(id, dir){
   const g = siblings(it), at = g.findIndex(x=>x.id===id), to = at+dir;
   if(at<0 || to<0 || to>=g.length) return;
   const rest = g.filter(x=>x.id!==id);
-  await move(id, it.lane, between(rest[to-1], rest[to]));
+  await move(id, it.lane, between(rest[to-1], rest[to]), it.reason);
 }
 // The list a card is ordered inside: its lane on a board, or its own board's
 // slice of the everything view.
-const siblings = it => allMode ? kept(it.board_id) : inLane(it.lane);
-const groupIn = col => col.dataset.b ? kept(col.dataset.b) : inLane(col.dataset.k);
+const siblings = it => allMode ? kept(it.board_id)
+                     : section(it.lane==='out' && it.reason ? 'done' : it.lane);
+const groupIn = col => col.dataset.b ? kept(col.dataset.b) : section(col.dataset.k);
 
 // Halfway between the neighbours it ends up with, or a step past the end.
 // A drag, a fingertip and a J/K nudge all land through this.
@@ -856,14 +884,18 @@ async function dropOn(item, col, clientY, over){
   // by side, it does not merge them.
   if(col.dataset.b && col.dataset.b !== item.board_id)
     return toast('a card stays on the board you sifted it on');
-  const to = col.dataset.k;
+  // Dropping on `done` says how it ended; dropping on `out` says it was a no,
+  // which is why dragging a shipped card back there un-ships it.
+  const k = col.dataset.k;
+  const to = k==='done' ? 'out' : k;
+  const reason = k==='done' ? (item.reason || 'done') : '';
   const group = groupIn(col).filter(x=>x.id!==item.id);
   let idx = group.length;
   if(over && over.dataset.id!==item.id){
     const at = group.findIndex(x=>x.id===over.dataset.id);
     if(at>=0){ const r=over.getBoundingClientRect(); idx = clientY>r.top+r.height/2 ? at+1 : at; }
   }
-  await move(item.id, to, between(group[idx-1], group[idx]));
+  await move(item.id, to, between(group[idx-1], group[idx]), reason);
 }
 
 async function move(id, lane, pos, reason){
@@ -1514,7 +1546,7 @@ async function readHash(){
   if(!slug){ board.innerHTML = '<div style="padding:40px;color:var(--muted)">No boards yet. Create one to start.</div>'; return; }
   if(!B || B.slug!==slug) await loadBoard(slug);
   // A bare board URL means the answer; /lane/<x> puts another one on the stage.
-  if(parts[1]==='lane') stageLane = LANES.includes(parts[2]) ? parts[2] : 'in';
+  if(parts[1]==='lane') stageLane = SECTIONS.includes(parts[2]) ? parts[2] : 'in';
   else if(!parts[1]) stageLane = 'in';
   paint(null);
 

@@ -56,13 +56,23 @@ next month, wondering whether you said no to this or shipped it.
 So a burial carries a reason: nothing (the plain no), **`done`** (you built it)
 or **`handed`** (it became work somewhere else — a todo, a ticket, another
 repo). On the board, `D` and `H` on a focused card bury it as one of those in a
-keypress; the drawer's chip sets or corrects it afterwards; `out` shows it on
-the card, and `/done` finds them.
+keypress, and the drawer's chip sets or corrects it afterwards.
 
-It is deliberately **not** a sixth lane. A lane is somewhere the sift can put a
-card with one key, and "I built this" is not a judgement you make in a queue —
-it is something you record later about a card you already kept. The sift's four
-keys are untouched, and `←` still means no without asking. A reason only exists
+**`done` then gets its own column.** The board shows six sections over five
+lanes: `out` holds what you said no to, `done` holds what left because it
+became real, and the reason on the burial is what tells them apart. It takes
+the stage like any other (`#/<board>/lane/done`), the header counts it, the
+status line reads `7 live · 9 done · 19 out`, and a card carries its chip even
+as a title-only token in the rail — which is the whole point, because a rail
+token is all you see of a pile you are not looking at. Dropping a card on
+`done` marks it; dropping it on `out` un-marks it, which is how you say a
+shipped thing was actually a no.
+
+It is deliberately **not** a sixth lane, even though it is a sixth column. A
+lane is somewhere the sift can put a card with one key, and "I built this" is
+not a judgement you make in a queue — it is something you record later about a
+card you already kept. The sift's four keys are untouched, `←` still means no
+without asking, and the API, the counts and every agent still see five lanes. A reason only exists
 in `out`: dig a card up and it is un-shipped, because it is back to being a
 question.
 
@@ -179,8 +189,8 @@ One lane holds the stage and the rest are a rail beside it. The stage is `in`,
 because after a sift that is the answer and the answer should not be a narrow
 column at the far right: its cards are numbered in your order, wide enough to
 read, and carry the first lines of the body. Clicking any rail lane's header
-puts *it* on the stage — which is how you read the maybes, or the graveyard,
-without leaving the board (`#/<board>/lane/<lane>`). `S` opens the sift, `Esc` leaves
+puts *it* on the stage — which is how you read the maybes, what shipped, or the
+graveyard, without leaving the board (`#/<board>/lane/<lane>`). `S` opens the sift, `Esc` leaves
 it, arrows vote, `space` skips, `U` undoes anywhere, and `D` / `H` on a focused
 card bury it as done or handed off. `/` filters every lane at
 once as you type — the graveyard is the pile you actually need to look things
