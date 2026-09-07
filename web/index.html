@@ -109,6 +109,13 @@ button,input,textarea,select{font:inherit;color:inherit}
 .bdesc:hover{color:var(--muted)}
 .bar-sp{flex:1}
 .stat{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);white-space:nowrap}
+/* Finding a card used to mean remembering which lane you put it in. */
+.find{flex:none;width:130px;background:var(--card);border:1px solid var(--hair);border-radius:6px;
+  padding:6px 10px;font-size:12.5px;transition:width .16s,border-color .15s,box-shadow .15s}
+.find:focus{outline:none;width:min(300px,32vw);border-color:var(--spark);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--spark) 18%,transparent)}
+.find.hit{border-color:var(--spark)}
+.find::placeholder{color:var(--faint)}
 .ghost{flex:none;background:none;border:1px solid var(--rule);color:var(--muted);padding:6px 10px;
   border-radius:6px;cursor:pointer;font-size:12.5px;white-space:nowrap}
 .ghost:hover{color:var(--ink);border-color:var(--ink)}
@@ -186,6 +193,10 @@ button,input,textarea,select{font:inherit;color:inherit}
 .card:hover{border-color:var(--rule);box-shadow:var(--lift)}
 .card:focus-visible{outline:2px solid var(--spark);outline-offset:2px}
 .card.dragging{opacity:.35;cursor:grabbing}
+/* A finger has no drag image, so the card gets a real one that follows it. */
+.card.lifted{position:fixed;z-index:170;margin:0;pointer-events:none;opacity:.96;
+  box-shadow:var(--drop);transform:scale(1.03);cursor:grabbing}
+.board.holding{user-select:none;-webkit-user-select:none}
 .card.sel{border-color:var(--spark);box-shadow:0 0 0 1px var(--spark)}
 .card .t{font-size:13.5px;font-weight:500;line-height:1.32;letter-spacing:-.005em;margin:0 0 3px;
   overflow-wrap:anywhere}
@@ -298,9 +309,12 @@ button,input,textarea,select{font:inherit;color:inherit}
   overflow-wrap:anywhere}
 .sift-card .body{font-size:1em;color:var(--muted);margin:0;max-width:64ch;line-height:1.6;
   white-space:pre-wrap;overflow-wrap:anywhere;padding-left:.85em;border-left:2px solid var(--hair)}
-.sift-card .said{margin:0;padding:.6em .85em;background:var(--sunk);border-radius:7px;
-  font-size:.92em;color:var(--muted);max-width:64ch}
-.sift-card .said b{color:var(--ink);font-weight:500}
+.sift-card .said{padding:.6em .85em;background:var(--sunk);border-radius:7px;
+  font-size:.92em;color:var(--muted);max-width:64ch;display:flex;flex-direction:column;gap:.55em}
+.sift-card .said p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.sift-card .said b{display:block;color:var(--faint);font-weight:500;font-family:"JetBrains Mono",monospace;
+  font-size:.72em;letter-spacing:.13em;text-transform:uppercase;margin-bottom:.15em}
+.sift-card .said b.agent{color:var(--spark)}
 .jot{display:flex;gap:8px;align-items:flex-start;margin:-.35em 0 0}
 .jot span{margin-top:.5em}
 .jot textarea{flex:1;min-width:0;max-width:52ch;background:none;border:0;resize:none;
@@ -427,6 +441,8 @@ button,input,textarea,select{font:inherit;color:inherit}
   .stage .col-head,.stage .col-body,.stage .quick{padding-left:14px;padding-right:14px}
   .rail .col-body{max-height:none}
   .stat,.bdesc{display:none}
+  .find{width:104px}
+  .find:focus{width:min(220px,52vw)}
   /* The phone story is the sift, so it gets the whole screen: card on top,
      the four votes as a row of thumbs underneath (or swipe the card). */
   .sift-stage{grid-template-columns:repeat(4,1fr);grid-template-rows:minmax(0,1fr) auto;gap:8px;padding:8px}
@@ -465,6 +481,7 @@ button,input,textarea,select{font:inherit;color:inherit}
   </span>
   <span class="bdesc" id="bdesc" title="Click to edit"></span>
   <span class="bar-sp"></span>
+  <input class="find" id="find" placeholder="Find  /" autocomplete="off" aria-label="Find an idea">
   <span class="stat" id="statEl"></span>
   <button class="ghost" id="newBoardBtn" type="button">New board</button>
   <button class="ghost" id="undoBtn" type="button" title="Put the last card back where it was">Undo</button>
@@ -531,12 +548,20 @@ const $ = id => document.getElementById(id);
 const board=$('board'), statEl=$('statEl'), bdesc=$('bdesc'), siftEl=$('sift'),
       stage=$('stage'), sfoot=$('siftFoot'), sscope=$('siftScope'), drawer=$('drawer'),
       scrim=$('scrim'), sheet=$('sheet'), sheetIn=$('sheetIn'),
-      boardBtn=$('boardBtn'), boardPop=$('boardPop'), popQ=$('popQ'), popList=$('popList');
+      boardBtn=$('boardBtn'), boardPop=$('boardPop'), popQ=$('popQ'), popList=$('popList'),
+      find=$('find');
 
 let boards=[], B=null, ideas=[], sel=null, fresh=new Set(), routing=false;
 
 const label = l => (B && B.labels && B.labels[l]) || l;
 const inLane = l => ideas.filter(i => i.lane === l);
+/* The filter is a lens on the board, never on the truth: inLane stays the lane
+   as it is, and only what gets painted is narrowed. So a drop still lands
+   between its real neighbours, and the sift still walks the whole pile. */
+let query = '';
+const matches = x => !query ||
+  (x.title+' '+(x.note||'')+' '+(x.body||'')).toLowerCase().includes(query);
+const showing = l => inLane(l).filter(matches);
 const byId = id => ideas.find(i => i.id === id);
 const nLive = () => ideas.filter(i => i.lane !== 'out').length;
 
@@ -588,41 +613,45 @@ function cardHTML(x, i, big){
 function snapshot(){
   const m={}; board.querySelectorAll('.card').forEach(c=>m[c.dataset.id]=c.getBoundingClientRect()); return m;
 }
-function emptyLine(k){
+function emptyLine(k, filtered){
+  if(filtered) return `No match for “${esc(query)}” in ${esc(label(k))}.`;
   if(k==='unsorted') return 'Nothing waiting. Drop ideas here — or let an agent.';
   if(k==='out') return 'Nothing buried yet.';
   if(k===stageLane) return `Nothing in ${esc(label(k))} yet. Sift the queue and what you keep lands here.`;
   return 'Empty.';
 }
+// While filtering, a lane says how much of it you are looking at.
+const laneCount = (all, some) => query ? `${some.length}/${all.length}` : String(all.length);
 function paint(prev){
   if(!B) return;
   if(!LANES.includes(stageLane)) stageLane = 'in';
   const scroll={}; board.querySelectorAll('.col-body').forEach(b=>scroll[b.dataset.k]=b.scrollTop);
 
-  const g = inLane(stageLane);
+  const all = inLane(stageLane), g = all.filter(matches);
   const stage = `<section class="col stage${stageLane==='out'?' is-out':''}" data-k="${stageLane}">
       <header class="col-head">
-        <span class="col-name">${esc(label(stageLane))}</span><span class="col-n">${g.length}</span>
-        ${g.length&&stageLane!=='out'?`<button class="col-sift" type="button" data-scope="${stageLane}">sift</button>`:''}
-        ${g.length>1?'<span class="col-hint">drag to order</span>':''}
+        <span class="col-name">${esc(label(stageLane))}</span><span class="col-n">${laneCount(all,g)}</span>
+        ${all.length&&stageLane!=='out'?`<button class="col-sift" type="button" data-scope="${stageLane}">sift</button>`:''}
+        ${g.length?'<button class="col-sift" type="button" data-copy="1" title="Copy this lane as markdown — shift for the bodies too">copy</button>':''}
+        ${all.length>1?'<span class="col-hint">drag or J/K to order</span>':''}
       </header>
       <div class="col-body" data-k="${stageLane}">
-        ${g.length ? g.map((x,i)=>cardHTML(x,i,true)).join('')
-                   : `<div class="col-empty">${emptyLine(stageLane)}</div>`}
+        ${g.length ? g.map(x=>cardHTML(x,all.indexOf(x),true)).join('')
+                   : `<div class="col-empty">${emptyLine(stageLane, all.length>0)}</div>`}
       </div>
       ${stageLane==='out'?'':`<div class="quick"><input data-lane="${stageLane}" placeholder="Add to ${esc(label(stageLane))}…" autocomplete="off"></div>`}
     </section>`;
 
   const rail = LANES.filter(k=>k!==stageLane).map(k=>{
-    const l = inLane(k);
+    const l = inLane(k), v = showing(k);
     return `<section class="col" data-k="${k}">
       <header class="col-head" role="button" tabindex="0" data-stage="${k}">
-        <span class="col-name">${esc(label(k))}</span><span class="col-n">${l.length}</span>
+        <span class="col-name">${esc(label(k))}</span><span class="col-n">${laneCount(l,v)}</span>
         ${l.length&&k!=='out'?`<button class="col-sift" type="button" data-scope="${k}">sift</button>`:''}
       </header>
       <div class="col-body" data-k="${k}">
-        ${l.length ? l.map(x=>cardHTML(x,0,false)).join('')
-                   : `<div class="col-empty">${emptyLine(k)}</div>`}
+        ${v.length ? v.map(x=>cardHTML(x,0,false)).join('')
+                   : `<div class="col-empty">${emptyLine(k, l.length>0)}</div>`}
       </div>
       ${k==='unsorted'?`<div class="quick"><input data-lane="unsorted" placeholder="Add an idea…" autocomplete="off"></div>`:''}
     </section>`;
@@ -647,7 +676,9 @@ function setStage(k){
   stageLane = k; paint(null); writeHash();
 }
 function drawStat(){
-  statEl.textContent = `${nLive()} live · ${inLane('out').length} out`;
+  statEl.textContent = query
+    ? `${ideas.filter(matches).length} of ${ideas.length} match`
+    : `${nLive()} live · ${inLane('out').length} out`;
   const s = nextScope();
   $('siftN').textContent = s ? inLane(s).length : 0;
   $('siftWhat').textContent = s && s!=='unsorted' ? 'Sift '+label(s) : 'Sift';
@@ -687,10 +718,46 @@ board.addEventListener('keydown', async e=>{
     const to = e.key==='ArrowRight' ? i+1 : i-1;
     if(to<0||to>=LANES.length) return;
     await move(c.dataset.id, LANES[to]);
-    const again = board.querySelector(`.card[data-id="${c.dataset.id}"]`); if(again) again.focus();
+    return refocus(c.dataset.id);
+  }
+  /* Across is which lane, along is where in it. With the duel shelved the
+     order of `in` is the whole ranking, and drag was the only way to set it —
+     which made the answer mouse-only. */
+  if(c && (e.key==='j'||e.key==='k'||e.key==='ArrowDown'||e.key==='ArrowUp')){
+    e.preventDefault();
+    await nudge(c.dataset.id, (e.key==='j'||e.key==='ArrowDown') ? 1 : -1);
+    return refocus(c.dataset.id);
   }
   if(c && e.key==='Enter'){ e.preventDefault(); openDrawer(c.dataset.id); }
 });
+function refocus(id){
+  const again = board.querySelector(`.card[data-id="${id}"]`);
+  if(again){ again.focus(); again.scrollIntoView({block:'nearest'}); }
+}
+async function nudge(id, dir){
+  const it = byId(id); if(!it) return;
+  const lane = inLane(it.lane), at = lane.findIndex(x=>x.id===id), to = at+dir;
+  if(at<0 || to<0 || to>=lane.length) return;
+  const rest = lane.filter(x=>x.id!==id);
+  await move(id, it.lane, between(rest[to-1], rest[to]));
+}
+
+// Halfway between the neighbours it ends up with, or a step past the end.
+// A drag, a fingertip and a J/K nudge all land through this.
+const between = (above, below) =>
+  above && below ? (above.pos+below.pos)/2 : above ? above.pos+1 : below ? below.pos-1 : 1;
+
+// Dropping onto a column: the card above the midpoint you released over wins.
+async function dropOn(item, col, clientY, over){
+  const to = col.dataset.k;
+  const group = inLane(to).filter(x=>x.id!==item.id);
+  let idx = group.length;
+  if(over && over.dataset.id!==item.id){
+    const at = group.findIndex(x=>x.id===over.dataset.id);
+    if(at>=0){ const r=over.getBoundingClientRect(); idx = clientY>r.top+r.height/2 ? at+1 : at; }
+  }
+  await move(item.id, to, between(group[idx-1], group[idx]));
+}
 
 async function move(id, lane, pos){
   const prev = snapshot();
@@ -728,18 +795,82 @@ board.addEventListener('drop', async e=>{
   const col=e.target.closest('.col'); if(!col||!dragId) return;
   e.preventDefault(); col.classList.remove('over');
   const item=byId(dragId); if(!item) return;
-  const to=col.dataset.k, over=e.target.closest('.card');
-  const group=inLane(to).filter(x=>x.id!==item.id);
-  let idx=group.length;
-  if(over && over.dataset.id!==item.id){
-    const at=group.findIndex(x=>x.id===over.dataset.id);
-    if(at>=0){ const r=over.getBoundingClientRect(); idx = e.clientY>r.top+r.height/2 ? at+1 : at; }
-  }
-  const above=group[idx-1], below=group[idx];
-  const pos = above&&below ? (above.pos+below.pos)/2
-            : above ? above.pos+1 : below ? below.pos-1 : 1;
-  await move(item.id, to, pos);
+  await dropOn(item, col, e.clientY, e.target.closest('.card'));
 });
+
+/* ------------------------------ touch drag ------------------------------
+   Native HTML5 drag is desktop-only, so on a finger a long press picks the
+   card up. Below the press, and below 10px of travel, the gesture is still a
+   scroll — which is what a column full of cards mostly needs it to be. */
+let held=null, hold=null, holdAt=null;
+
+board.addEventListener('pointerdown', e=>{
+  if(e.pointerType==='mouse' || e.target.closest('input,textarea,button')) return;
+  const c = e.target.closest('.card'); if(!c) return;
+  holdAt = {x:e.clientX, y:e.clientY, id:e.pointerId};
+  hold = setTimeout(()=>{ hold=null; lift(c); }, 340);
+});
+board.addEventListener('pointermove', e=>{
+  if(hold && Math.hypot(e.clientX-holdAt.x, e.clientY-holdAt.y) > 10){ clearTimeout(hold); hold=null; }
+  if(!held) return;
+  held.moved = true;
+  held.el.style.left = (e.clientX - held.gx) + 'px';
+  held.el.style.top  = (e.clientY - held.gy) + 'px';
+  const col = colUnder(e.clientX, e.clientY);
+  board.querySelectorAll('.col.over').forEach(x=>{ if(x!==col) x.classList.remove('over'); });
+  if(col) col.classList.add('over');
+});
+// touch-action cannot be changed mid-gesture, so the scroll is refused here
+// instead — and only once the press has already turned into a drag.
+board.addEventListener('touchmove', e=>{ if(held) e.preventDefault(); }, {passive:false});
+board.addEventListener('pointerup', async e=>{
+  if(hold){ clearTimeout(hold); hold=null; }
+  if(!held) return;
+  const item = byId(held.id), moved = held.moved;
+  const col = colUnder(e.clientX, e.clientY), over = cardUnder(e.clientX, e.clientY, held.id);
+  drop();
+  // A press that never travelled is not a drag: leave the card where it is
+  // rather than writing a decision to the log for a finger that changed its
+  // mind. The tap it turns into still opens the card.
+  if(moved && item && col) await dropOn(item, col, e.clientY, over);
+});
+// The tap that ends a drag would otherwise open the card it just moved.
+board.addEventListener('click', e=>{
+  if(!swallow) return;
+  swallow = false; e.stopPropagation(); e.preventDefault();
+}, true);
+board.addEventListener('contextmenu', e=>{ if(held) e.preventDefault(); });
+board.addEventListener('pointercancel', ()=>{ if(hold){ clearTimeout(hold); hold=null; } drop(); });
+
+function lift(c){
+  const r = c.getBoundingClientRect();
+  try{ c.setPointerCapture(holdAt.id); }catch(_){}   // so a release off the board still lands
+  const el = c.cloneNode(true);
+  el.classList.add('lifted');
+  Object.assign(el.style, {left:r.left+'px', top:r.top+'px', width:r.width+'px'});
+  document.body.appendChild(el);
+  held = {id:c.dataset.id, el, src:c, gx:holdAt.x-r.left, gy:holdAt.y-r.top, moved:false};
+  c.classList.add('dragging'); board.classList.add('holding');
+  if(navigator.vibrate) navigator.vibrate(12);
+}
+let swallow = false;
+function drop(){
+  if(!held) return;
+  swallow = held.moved;
+  held.el.remove(); held.src.classList.remove('dragging'); board.classList.remove('holding');
+  board.querySelectorAll('.col.over').forEach(x=>x.classList.remove('over'));
+  held = null;
+}
+// The lifted clone is under the finger, so it has to be looked past.
+function under(x, y, sel){
+  const was = held && held.el.style.display;
+  if(held) held.el.style.display='none';
+  const el = document.elementFromPoint(x, y);
+  if(held) held.el.style.display = was || '';
+  return el && el.closest(sel);
+}
+const colUnder = (x,y) => under(x, y, '.col');
+const cardUnder = (x,y,not) => { const c = under(x, y, '.card'); return c && c.dataset.id!==not ? c : null; };
 
 /* ------------------------------ drawer ------------------------------ */
 async function openDrawer(id){
@@ -825,10 +956,32 @@ function closeDrawer(){
 }
 scrim.addEventListener('click', closeDrawer);
 board.addEventListener('click', e=>{
+  const cp=e.target.closest('[data-copy]'); if(cp) return copyStage(e.shiftKey);
   const d=e.target.closest('.col-sift'); if(d) return openSift(d.dataset.scope);
   const c=e.target.closest('.card'); if(c) return openDrawer(c.dataset.id);
   const h=e.target.closest('[data-stage]'); if(h) setStage(h.dataset.stage);
 });
+
+/* ------------------------------ copy out ------------------------------
+   Whatever comes out of a sift ends up somewhere else — a message, an issue, a
+   slide. Markdown is the format every one of those reads. */
+function stageMarkdown(withBody){
+  const g = showing(stageLane);
+  return `## ${B.name} · ${label(stageLane)}\n\n` + g.map((x,i)=>{
+    let s = `${i+1}. ${x.title}`;
+    if(x.note) s += `\n   ${x.note}`;
+    if(withBody && x.body) s += `\n\n   ${x.body.trim().replace(/\n/g,'\n   ')}\n`;
+    return s;
+  }).join('\n') + '\n';
+}
+async function copyStage(withBody){
+  const n = showing(stageLane).length;
+  if(!n) return toast('nothing to copy');
+  try{
+    await navigator.clipboard.writeText(stageMarkdown(withBody));
+    toast(`${n} copied as markdown` + (withBody ? ', bodies and all' : ' · shift for the bodies'));
+  }catch(e){ toast('the clipboard refused: '+e.message); }
+}
 
 /* ------------------------------ sift ------------------------------
    One card, four directions. The queue is client-side so a skip costs
@@ -855,7 +1008,7 @@ function zoneHTML(l){
 function drawCard(){
   const x = byId(q[0]);
   if(!x) return drawDone();
-  const said = (x.comment_count||0);
+  const said = x.comments||[];
   const depth = Math.min(2, q.length-1);
   stage.innerHTML = VOTES.map(zoneHTML).join('') + `
     <div class="deck"><div class="pile">
@@ -866,7 +1019,9 @@ function drawCard(){
         <div class="jot"><textarea id="jot" rows="1" placeholder="one line — what it is"
           autocomplete="off">${esc(x.note)}</textarea><span>N</span></div>
         ${x.body?`<p class="body">${esc(x.body)}</p>`:''}
-        ${said?`<p class="said"><b>${said} note${said===1?'':'s'}</b> on this card — open it on the board to read them.</p>`:''}
+        ${said.length?`<div class="said">${said.map(c=>
+          `<p><b class="${c.who==='agent'?'agent':''}">${c.who==='agent'?'an agent argues':'you noted'}</b>${esc(c.text)}</p>`
+        ).join('')}</div>`:''}
       </article>
     </div></div>`;
   justVoted = null;
@@ -1243,6 +1398,18 @@ popQ.addEventListener('keydown', e=>{
   else if(e.key==='Escape'){ e.preventDefault(); closePop(); boardBtn.focus(); }
 });
 $('popNew').addEventListener('click', ()=>{ closePop(); newBoard(); });
+
+/* ------------------------------ find ------------------------------ */
+function setQuery(v){
+  query = v.trim().toLowerCase();
+  find.classList.toggle('hit', !!query);
+  paint(null);
+}
+find.addEventListener('input', ()=> setQuery(find.value));
+find.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ e.preventDefault(); find.value=''; setQuery(''); find.blur(); }
+  else if(e.key==='Enter'){ e.preventDefault(); find.blur(); }
+});
 document.addEventListener('click', e=>{
   if(!boardPop.hidden && !e.target.closest('.boardsel')) closePop();
 });
@@ -1263,10 +1430,12 @@ document.addEventListener('keydown', e=>{
     return;
   }
   if(drawer.classList.contains('on')){ if(e.key==='Escape'){ e.preventDefault(); document.activeElement.blur(); closeDrawer(); } return; }
-  if(typing) return;
+  if(typing || e.metaKey || e.ctrlKey || e.altKey) return;   // ⌘S is the browser's
   if(e.key==='b'||e.key==='B'){ e.preventDefault(); openPop(); }
   else if(e.key==='s'||e.key==='S'){ e.preventDefault(); openSift(null); }
   else if(e.key==='u'||e.key==='U'){ e.preventDefault(); undo(); }
+  else if(e.key==='/'){ e.preventDefault(); find.focus(); find.select(); }
+  else if(e.key==='c'||e.key==='C'){ e.preventDefault(); copyStage(e.shiftKey); }
 });
 
 let tt=null;

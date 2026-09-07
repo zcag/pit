@@ -52,9 +52,11 @@ four keys, four lanes, plus the queue. A board renames one — a writing board
 calls `in` *drafting* — and the sift, the API and every agent still speak one
 vocabulary.
 
-Order *within* a lane is yours: drag a card and it goes where you put it. There
-is no computed ranking any more (see below), so `in` in the order you dragged it
-is the answer.
+Order *within* a lane is yours: drag a card and it goes where you put it —
+with a mouse, with a finger (press and hold, then move), or with `J`/`K` on a
+focused card, because the order of `in` is the whole answer and it should not
+need a pointer. There is no computed ranking any more (see below), so `in` in
+the order you put it is the answer.
 
 ## The log is the truth
 
@@ -141,7 +143,14 @@ column at the far right: its cards are numbered in your order, wide enough to
 read, and carry the first lines of the body. Clicking any rail lane's header
 puts *it* on the stage — which is how you read the maybes, or the graveyard,
 without leaving the board (`#/<board>/lane/<lane>`). `S` opens the sift, `Esc` leaves
-it, arrows vote, `space` skips, `U` undoes anywhere. In the sift the card is
+it, arrows vote, `space` skips, `U` undoes anywhere. `/` filters every lane at
+once as you type — the graveyard is the pile you actually need to look things
+up in — and `C` copies the stage to the clipboard as numbered markdown (`shift`
+for the bodies too), because whatever comes out of a sift ends up somewhere
+else. A card's comment thread travels
+with it into the sift rather than being announced as a count: the case for an
+idea matters in the second you are about to bury it, not afterwards on a board
+you may never open. In the sift the card is
 sized to its text rather than the text to the card — it is measured after render
 and scaled until it fits, so a one-line idea comes out big, a long one dense, and
 neither asks you to scroll. The two card edges behind it are the rest of the
@@ -187,7 +196,6 @@ copy of the file first.
 - **No dedupe on insert.** Agents re-propose the same idea constantly; embedding
   each new idea and matching it against live *and* buried ones is the fix, and
   it matters more now that the queue is the front door.
-- **Drag is desktop-only** (native HTML5 DnD). The phone story is the sift.
 - **A skip is session-only.** Skipping rotates the card to the back of this
   pass; reopen the sift and it is in the queue again, unmarked. If "I keep
   skipping this one" turns out to be a signal, it needs a counter.

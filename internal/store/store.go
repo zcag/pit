@@ -559,35 +559,37 @@ func (s *Store) ListIdeas(boardID string) ([]model.Idea, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	// One extra query for the whole board rather than one per card.
-	counts, err := s.commentCounts(boardID)
+	// One extra query for the whole board rather than one per card, and the
+	// threads themselves rather than a tally of them: the case for an idea is
+	// what the sift decides on, so it has to arrive with the card.
+	threads, err := s.threads(boardID)
 	if err != nil {
 		return nil, err
 	}
 	for i := range out {
-		out[i].CommentCount = counts[out[i].ID]
+		out[i].Comments = threads[out[i].ID]
+		out[i].CommentCount = len(out[i].Comments)
 	}
 	return out, nil
 }
 
-func (s *Store) commentCounts(boardID string) (map[string]int, error) {
-	rows, err := s.db.Query(`SELECT c.idea_id, COUNT(*) FROM comments c
+// threads is every comment on a board in one query, keyed by idea.
+func (s *Store) threads(boardID string) (map[string][]model.Comment, error) {
+	rows, err := s.db.Query(`SELECT c.id,c.idea_id,c.who,c.text,c.created_at FROM comments c
 	                          JOIN ideas i ON i.id = c.idea_id
-	                          WHERE i.board_id = ? GROUP BY c.idea_id`, boardID)
+	                          WHERE i.board_id = ? ORDER BY c.created_at`, boardID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := map[string]int{}
-	for rows.Next() {
-		var id string
-		var n int
-		if err := rows.Scan(&id, &n); err != nil {
-			return nil, err
-		}
-		out[id] = n
+	all, err := scanComments(rows)
+	if err != nil {
+		return nil, err
 	}
-	return out, rows.Err()
+	out := make(map[string][]model.Comment, len(all))
+	for _, c := range all {
+		out[c.IdeaID] = append(out[c.IdeaID], c)
+	}
+	return out, nil
 }
 
 func (s *Store) Idea(id string) (model.Idea, error) {
@@ -780,6 +782,10 @@ func (s *Store) Comments(ideaID string) ([]model.Comment, error) {
 	if err != nil {
 		return nil, err
 	}
+	return scanComments(rows)
+}
+
+func scanComments(rows *sql.Rows) ([]model.Comment, error) {
 	defer rows.Close()
 	var out []model.Comment
 	for rows.Next() {
