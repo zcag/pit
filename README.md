@@ -5,8 +5,6 @@ with a short list of what you actually meant to keep.
 
 You pit ideas against your own judgement. It is also the hole you dump them into.
 
-<https://pit.example.com>
-
 ## Why it is not a kanban board
 
 A board gives you buckets and no verdict, so you end up with sixty cards in
@@ -307,7 +305,7 @@ loading them is the host's job.
 ```sh
 make run                     # localhost:8802, throwaway db, key "dev"
 make test
-make deploy                  # cross-compile + rsync + restart on the server
+make deploy                  # cross-compile + rsync + restart; HOST etc. in local.mk
 make install-service         # first time only; fill deploy/pit.service first
 ```
 
@@ -327,7 +325,7 @@ Issuer and resource both unset ⇒ OAuth off, `/mcp` stays API-key-only.
 The resource-server layer behind those four is
 [zcag/mcpauth](https://github.com/zcag/mcpauth) — token verification, the RFC
 9728 metadata, and the discovery challenge, with nothing in it that knows what
-pit is. The original keeps its own older copy on purpose; pit is the consumer.
+pit is.
 
 Opening a pre-lanes database migrates it in place: buckets map onto lanes
 (`shortlist`→`in`, `parked`→`unsure`, the intake bucket→`unsorted`, the terminal
@@ -348,7 +346,8 @@ copy of the file first.
   *entire* tools/list — every tool vanishes because of the one that takes no
   input. `internal/api/mcp_test.go` guards it.
 - **The identity gate has to name the claim the token actually carries.** This
-  AuthKit app delegates sign-in to an external identity provider and issues `sub="1"` with no `email`, so
+  AuthKit app delegates sign-in to an external identity provider and issues
+  `sub="1"` with no `email`, so
   `PIT_OAUTH_ALLOWED_EMAIL` alone rejects every connect while the token itself
   verifies perfectly. `deploy/pit.service.template` says so; the deployed unit
   had drifted from it for days. Connect once and read the identity off the

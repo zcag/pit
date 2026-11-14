@@ -18,8 +18,7 @@ Environment=PIT_MCP_RESOURCE=https://pit.example.com/mcp
 # ⚠️ This AuthKit app issues sub="1" and NO email claim — sign-in is delegated to
 # an external identity provider, and the sub is that provider's user id, not a WorkOS
 # one. So the gate has to be the sub, and PIT_OAUTH_ALLOWED_EMAIL is useless
-# here. another app on the same tenant carries ALLOWED_SUB=1 for the same reason; it
-# looks like a placeholder and is not.
+# here. ALLOWED_SUB=1 looks like a placeholder and is not.
 #
 # For a different authorization server, connect once and read the real identity:
 #   journalctl --user -u pit | grep 'first verified-token identity'

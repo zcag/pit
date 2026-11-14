@@ -1,7 +1,8 @@
 BINARY      := pit
-HOST      := pit-host
-REMOTE_USER := pit
-REMOTE_DIR  := /home/$(REMOTE_USER)/pit
+-include local.mk
+HOST        ?= pit-host
+REMOTE_USER ?= pit
+REMOTE_DIR  ?= pit
 SERVICE     := pit
 INSTALL_DIR := $(HOME)/.local/bin
 

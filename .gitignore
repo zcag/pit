@@ -3,3 +3,4 @@ bin/
 *.db-wal
 *.db-shm
 deploy/pit.service
+local.mk

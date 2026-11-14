@@ -2,6 +2,7 @@
   "name": "@zcag/pit",
   "version": "0.1.0",
   "description": "An idea board you decide on one card at a time, as one dependency-free web component.",
+  "license": "MIT",
   "type": "module",
   "exports": { ".": "./web/pit.js" },
   "files": ["web/pit.js"],
