@@ -22,6 +22,7 @@ build:
 
 test:
 	go test ./...
+	node --test test/
 
 run: build
 	PIT_API_KEY=$${PIT_API_KEY:-dev} ./bin/$(BINARY) --addr 127.0.0.1:8802 --db /tmp/pit-dev.db --seed

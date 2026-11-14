@@ -99,6 +99,10 @@ func (s *Server) routes() {
 
 	if s.cfg.Web != nil {
 		files := http.FileServer(http.FS(s.cfg.Web))
+		m.HandleFunc("GET /pit.js", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			files.ServeHTTP(w, r)
+		})
 		m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if s.cfg.APIKey != "" && !s.hasSession(r) {
 				http.Redirect(w, r, "/login", http.StatusFound)

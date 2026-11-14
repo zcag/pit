@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pit · example</title>
+<style>html,body{height:100%;margin:0} body{display:flex;flex-direction:column} pit-board{flex:1;min-height:0}</style>
+</head>
+<body>
+<pit-board id="board"></pit-board>
+<script type="module">
+import { mountPit, memoryStore } from '../web/pit.js';
+
+const KEY = 'pit-example';
+let saved = null;
+try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (_) {}
+
+const store = memoryStore(saved || {
+  board: { name: 'Photos from last week', description: 'keep or toss' },
+  cards: [
+    { title: 'Beach at dusk', img: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2QwODc3MCIvPjx0ZXh0IHg9IjIwMCIgeT0iMTY1IiBmb250LXNpemU9IjQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiI+ZHVzazwvdGV4dD48L3N2Zz4=', source: 'agent', author: 'photo agent', note: 'sharpest of the five' },
+    { title: 'Blurry dog', img: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzVlODFhYyIvPjx0ZXh0IHg9IjIwMCIgeT0iMTY1IiBmb250LXNpemU9IjQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiI+ZG9nPC90ZXh0Pjwvc3ZnPg==', source: 'agent', author: 'photo agent' },
+    { title: 'Receipt', img: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2EzYmU4YyIvPjx0ZXh0IHg9IjIwMCIgeT0iMTY1IiBmb250LXNpemU9IjQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZmZmIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiI+cmVjZWlwdDwvdGV4dD48L3N2Zz4=', body: 'Looks like a receipt; probably only needed for the return window.' },
+    { title: 'The listing it came from', url: 'https://example.com/listing', note: 'a card can carry a link' },
+  ],
+}, { save: st => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (_) {} } });
+
+window.pit = mountPit(document.getElementById('board'), {
+  store,
+  votes: ['in', 'out'],
+  labels: { in: 'keep', out: 'toss' },
+  features: { reasons: false },
+  onVote: (card, lane) => console.log('voted', card.title, lane),
+  onPass: pass => console.log('pass', pass),
+});
+</script>
+</body>
+</html>

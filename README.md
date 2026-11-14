@@ -220,6 +220,88 @@ whole credential and the same button revokes it.
 Every view has an address:
 `#/<board>`, `#/<board>/<ideaId>`, `#/<board>/sift[/<lane>]`, `#/all`.
 
+## pit in your own page
+
+The board, the sift and the drawer are one file, `web/pit.js`: an ES module
+with no dependencies that draws into a shadow root, so the host page's styles
+cannot reach it and its own cannot leak out. pit's app is a shell around it,
+and anything else can mount the same thing.
+
+```html
+<pit-board id="b" style="height:100vh"></pit-board>
+<script type="module">
+  import { mountPit, memoryStore } from 'https://pit.example.com/pit.js';
+  const store = memoryStore({
+    board: { name: 'Desk lamps', description: 'pick one' },
+    cards: [
+      { title: 'BenQ e-Reading', source: 'agent', author: 'shopping', url: 'https://…', img: 'lamp.jpg' },
+      { title: 'The cheap IKEA one', note: 'my own idea' },
+    ],
+  }, { save: state => localStorage.setItem('lamps', JSON.stringify(state)) });
+  mountPit(document.getElementById('b'), { store, votes: ['in', 'out'], labels: { in: 'buy', out: 'no' } });
+</script>
+```
+
+`/pit.js` is the one file pit serves without the key (with
+`Access-Control-Allow-Origin: *`), so a page anywhere can load it. Or copy the
+file, or depend on the repo (`package.json` exports it). `examples/index.html`
+is a whole page: serve the repo root with any static server and open
+`/examples/`.
+
+**A card** is `{id, title, note, body, lane, pos, reason, source, author,
+img, url, comments, created_at}`; only `title` is required. `source` is `me` or
+`agent`, and it shows everywhere a card does: a dot on the rail, the name on the
+stage, "shopping suggested" on top of the card in the sift, "from shopping" in
+the drawer. `author` names the agent; without it the card says "an agent".
+
+**A store** is where cards live. Every call is async:
+
+| | |
+|---|---|
+| `list()` | `{cards, board?}`; `board` is `{name, description, labels}`. With `groups` it draws the everything view instead |
+| `add(cards)` | the cards as stored |
+| `vote(id, lane)` | one decision from the sift |
+| `place(id, {lane, pos, reason})` | a drag, a J/K nudge, a burial |
+| `undo()` | the card put back, or `null` |
+| `get(id)` · `edit(id, patch)` · `remove(id)` · `comment(id, text)` | the drawer |
+| `subscribe(fn)` | optional: call `fn` when someone else wrote, and the board redraws |
+
+Two come with it. `restStore(slug)` is a board on a pit server (pit's own app
+uses it). `memoryStore(state, {save})` keeps everything in one object,
+`{board, cards, log}`, with the server's rules: the log only grows, undo voids
+its newest live row, a reason lives only in `out`. `save` gets the whole state
+after every write, and `replace(state)` takes one written from outside, which is
+how a host whose state can change under it (another tab, an agent) keeps the
+board live.
+
+**Options** to `mountPit(el, opts)`:
+
+| | |
+|---|---|
+| `store` | the only one required |
+| `votes` | which of `in maybe unsure out` the sift offers; default all four. The arrows stay where they are |
+| `labels` | display names per lane, under any the board itself sets |
+| `who` | `{me, agent}`, how the two sides read; default `you` and `an agent` |
+| `features` | turn off `add`, `drag`, `edit`, `comments`, `remove`, `copy`, `reasons` (done and handed off), `bar` (the header) |
+| `onVote(card, lane)` | after every vote |
+| `onPass({scope, did, total, done})` | when a pass ends, or is left with cards still in it |
+| `onView({stage, open, sift})` | whenever what is on screen changes, for an address bar |
+| `onBoard(board)`, `onStat(stat)` | what a host header might show |
+| `onDescClick`, `onGroup`, `stageActions` | hooks pit's app uses for its sheets and share links |
+| `open(url)`, `copy(text)` | how a link opens and what the clipboard is, for a host that is not a plain browser tab |
+| `keys: false` | leave the keyboard alone |
+
+It hands back `{reload, use(store), sift(lane), closeSift, open(id),
+closeDrawer, setStage, undo, copy, toast, view, board, cards, destroy}`.
+
+The header has two slots, `start` and `end`, for a host's own controls; pit's
+app puts its board picker and theme switch there. Without anything in `start`
+the board's name shows. Colours come from `--pit-*` custom properties set
+anywhere above the element (`--pit-ink`, `--pit-bg`, `--pit-spark`, and the
+rest of pit's palette names); unset, it uses pit's own, light or dark with the
+system. Fonts come from `--pit-font`, `--pit-mono` and `--pit-display`, and
+loading them is the host's job.
+
 ## Running it
 
 ```sh

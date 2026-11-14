@@ -57,9 +57,16 @@ body{margin:0;background:var(--bg);color:var(--ink);
   font-family:"Inter Tight",system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.5;
   -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
 button,input,textarea,select{font:inherit;color:inherit}
+pit-board{flex:1;min-height:0}
+:root{--pit-bg:var(--bg); --pit-surface:var(--surface); --pit-sunk:var(--sunk); --pit-card:var(--card);
+  --pit-ink:var(--ink); --pit-muted:var(--muted); --pit-faint:var(--faint);
+  --pit-rule:var(--rule); --pit-hair:var(--hair); --pit-spark:var(--spark); --pit-spark-ink:var(--spark-ink);
+  --pit-cold:var(--cold); --pit-dead:var(--dead);
+  --pit-shadow:var(--shadow); --pit-lift:var(--lift); --pit-drop:var(--drop)}
+:root{--pit-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--pit-scheme:dark}}
+:root[data-theme="dark"]{--pit-scheme:dark}
 
-.bar{flex:none;display:flex;align-items:center;gap:11px;height:52px;padding:0 14px;
-  border-bottom:1px solid var(--hair);background:var(--surface)}
 .mark{font-family:"Martian Mono",monospace;font-weight:700;font-size:16px;letter-spacing:-.07em;flex:none}
 .mark::after{content:"";display:inline-block;width:6px;height:6px;background:var(--spark);margin-left:6px;vertical-align:2px}
 .boardsel{position:relative;padding-left:11px;border-left:1px solid var(--rule)}
@@ -71,6 +78,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 .boardbtn b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .boardbtn .chev{width:5px;height:5px;flex:none;border-right:1.5px solid var(--faint);
   border-bottom:1.5px solid var(--faint);transform:translateY(-2px) rotate(45deg)}
+.start{display:flex;align-items:center;gap:11px;min-width:0}
+.end{display:flex;align-items:center;gap:11px}
 
 /* The picker is also the only across-boards view there is, so each row carries
    what you would open a board to find out: what it is for, how much is live,
@@ -107,17 +116,6 @@ button,input,textarea,select{font:inherit;color:inherit}
   font-size:13px;color:var(--muted);cursor:pointer}
 .pop-new:hover{background:var(--sunk);color:var(--ink)}
 .pop-hint{font-family:"JetBrains Mono",monospace;font-size:9.5px;color:var(--faint);padding-right:6px}
-.bdesc{font-size:12.5px;color:var(--faint);max-width:30ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
-.bdesc:hover{color:var(--muted)}
-.bar-sp{flex:1}
-.stat{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);white-space:nowrap}
-/* Finding a card used to mean remembering which lane you put it in. */
-.find{flex:none;width:130px;background:var(--card);border:1px solid var(--hair);border-radius:6px;
-  padding:6px 10px;font-size:12.5px;transition:width .16s,border-color .15s,box-shadow .15s}
-.find:focus{outline:none;width:min(300px,32vw);border-color:var(--spark);
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--spark) 18%,transparent)}
-.find.hit{border-color:var(--spark)}
-.find::placeholder{color:var(--faint)}
 .ghost{flex:none;background:none;border:1px solid var(--rule);color:var(--muted);padding:6px 10px;
   border-radius:6px;cursor:pointer;font-size:12.5px;white-space:nowrap}
 .ghost:hover{color:var(--ink);border-color:var(--ink)}
@@ -126,325 +124,10 @@ button,input,textarea,select{font:inherit;color:inherit}
   color:var(--spark-ink);border:0;padding:8px 13px;border-radius:6px;cursor:pointer;
   font-size:13.5px;font-weight:600;letter-spacing:-.01em}
 .go:hover{filter:brightness(1.07)}
-.go[disabled]{opacity:.4;cursor:default;filter:none}
-.go kbd,.go .n{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:500;
-  background:color-mix(in srgb,var(--spark-ink) 15%,transparent);border-radius:3px;padding:2px 5px}
-
-/* ---- board: what you kept holds the room; everything else is a rail ---- */
-.board{flex:1;min-height:0;display:grid;gap:0;overflow:hidden;
-  grid-template-columns:minmax(0,1fr) minmax(230px,23vw)}
-/* min-height:0 is load-bearing, not tidying. A grid item defaults to
-   min-height:auto, so the column grows to fit its cards instead of being held
-   to the row height — .col-body then has nothing to scroll against, and the
-   overflow lands below the viewport where body{overflow:hidden} clips it. */
-.col{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--bg);
-  transition:background .15s}
-.col.over{background:color-mix(in srgb,var(--spark) 11%,var(--bg))}
-.stage{border-right:1px solid var(--rule)}
-.stage.is-out{background:color-mix(in srgb,var(--bg) 88%,var(--sunk))}
-/* `done` is the one pile you are meant to feel good looking at, so it is not
-   dressed like the graveyard next to it. */
-.col.is-done .col-name{color:var(--spark)}
-/* The chip cannot live inside .t — that is a -webkit-box, so a span in it
-   becomes a full-width box item on its own line. It is a sibling, and the card
-   becomes a row to hold the two side by side. */
-.card.slim.marked{display:flex;align-items:flex-start;gap:7px}
-.card.slim .why{flex:none;margin-top:1px}
-.card.slim .t{flex:1;min-width:0}
-/* Everything kept, on one stage. The question "what have I committed to" does
-   not respect board boundaries — it is the union, and it is short by
-   construction. Each board keeps its own stage; nothing is merged or ranked
-   across them. */
-.board.all{grid-template-columns:minmax(0,1fr)}
-.all-scroll{flex:1;min-height:0;overflow-y:auto}
-.all .stage{flex:none;border-right:0}
-.all .stage .col-body{flex:none;overflow:visible;padding-bottom:4px}
-.all .stage .col-head{padding-top:22px}
-.all .col-name{cursor:pointer;background:none;border:0;padding:0;font:inherit;
-  font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--ink)}
-.all .col-name:hover{color:var(--spark)}
-.rail{min-height:0;display:flex;flex-direction:column;overflow-y:auto;background:var(--sunk)}
-.rail .col{flex:none;background:none;border-bottom:1px solid var(--hair)}
-.rail .col:last-child{border-bottom:0}
-.rail .col-body{max-height:min(34vh,300px)}
-
-.col-head{flex:none;display:flex;align-items:center;gap:8px;padding:13px 14px 9px}
-.stage .col-head{padding:16px 20px 12px}
-.col-name{font-family:"JetBrains Mono",monospace;font-size:10.5px;font-weight:500;
-  letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-.stage .col-name{font-size:12px;color:var(--ink)}
-.col-n{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--faint)}
-.col-hint{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:9.5px;color:var(--faint)}
-.col-sift{background:none;border:0;cursor:pointer;padding:3px 6px;border-radius:4px;
-  color:var(--faint);line-height:1;font-family:"JetBrains Mono",monospace;font-size:9.5px;
-  letter-spacing:.13em;text-transform:uppercase;opacity:0;transition:opacity .15s}
-.col:hover .col-sift,.col-sift:focus-visible{opacity:1}
-.col-sift:hover{color:var(--spark-ink);background:var(--spark)}
-/* A rail header is a button: any lane can take the stage, which is how you
-   read the maybes, or the graveyard, without leaving the board. */
-.rail .col-head{cursor:pointer;width:100%;text-align:left;background:none;border:0}
-.rail .col-head:hover .col-name{color:var(--ink)}
-.rail .col-head:hover{background:color-mix(in srgb,var(--ink) 4%,transparent)}
-
-.col-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;
-  display:flex;flex-direction:column;gap:7px}
-.stage .col-body{padding:0 20px 16px;gap:10px}
-/* The stage is a document column, not a wall: capped measure, centred, so a
-   wide screen gives it air rather than 1100px lines. */
-.stage .col-head,.stage .col-body>*,.stage .quick input{max-width:860px;width:100%;
-  display:block;margin-inline:auto}
-.stage .col-head{display:flex}
-.col-body::-webkit-scrollbar{width:8px}
-.col-body::-webkit-scrollbar-thumb{background:var(--rule);border-radius:4px}
-.col-empty{font-size:12.5px;color:var(--faint);padding:13px 8px;border:1px dashed var(--rule);
-  border-radius:7px;text-align:center;line-height:1.4}
-.stage .col-empty{padding:34px 20px;font-size:14px;max-width:46ch !important;margin:8px auto 0}
-
-/* A footer, not a card that happens to be last. Without the rule the scroll cut
-   lands flush against the input and the final card reads as broken. */
-.quick{flex:none;padding:10px;border-top:1px solid var(--hair)}
-.stage .quick{padding:12px 20px}
-.quick input{width:100%;background:var(--card);border:1px dashed var(--rule);border-radius:7px;
-  padding:9px 10px;font-size:13px;color:var(--ink)}
-.quick input::placeholder{color:var(--faint)}
-.quick input:focus{outline:none;border-style:solid;border-color:var(--spark);
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--spark) 20%,transparent)}
-
-.card{background:var(--card);border:1px solid var(--hair);border-radius:7px;padding:9px 10px 8px;
-  cursor:grab;box-shadow:var(--shadow);text-align:left;width:100%;position:relative;
-  transition:box-shadow .15s,border-color .15s,opacity .18s}
-.card:hover{border-color:var(--rule);box-shadow:var(--lift)}
-.card:focus-visible{outline:2px solid var(--spark);outline-offset:2px}
-.card.dragging{opacity:.35;cursor:grabbing}
-/* A finger has no drag image, so the card gets a real one that follows it. */
-.card.lifted{position:fixed;z-index:170;margin:0;pointer-events:none;opacity:.96;
-  box-shadow:var(--drop);transform:scale(1.03);cursor:grabbing}
-.board.holding{user-select:none;-webkit-user-select:none}
-.card.sel{border-color:var(--spark);box-shadow:0 0 0 1px var(--spark)}
-.card .t{font-size:13.5px;font-weight:500;line-height:1.32;letter-spacing:-.005em;margin:0 0 3px;
-  overflow-wrap:anywhere}
-.card .n{font-size:11.5px;color:var(--muted);line-height:1.36;margin:0;overflow-wrap:anywhere}
-.card .f{display:flex;align-items:center;gap:7px;margin-top:8px;
-  font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--faint)}
-.card .src{width:5px;height:5px;border-radius:50%;background:var(--cold);flex:none}
-.card .src.agent{background:var(--spark)}
-.card .age{margin-left:auto;white-space:nowrap}
-/* A grave with a headstone. Without this `out` says "no" and "shipped" in the
-   same breath, which is fine for clearing the stage and wrong for everything
-   that reads the pile afterwards. */
-.card .why{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.11em;
-  text-transform:uppercase;border:1px solid currentColor;border-radius:3px;padding:1px 4px;
-  color:var(--cold);opacity:.85}
-.card .why.done{color:var(--spark)}
-.stage.is-out .card .f .why,.rail .col[data-k="out"] .card .why{color:var(--cold)}
-.stage.is-out .card .f .why.done,.rail .col[data-k="out"] .card .why.done{color:var(--spark)}
-.card.fresh{animation:land .55s cubic-bezier(.2,.7,.3,1)}
-@keyframes land{from{opacity:0;transform:translateY(-8px);box-shadow:0 0 0 3px var(--spark)}to{opacity:1;transform:none}}
-
-/* On the stage a card is something to read, not a token to count. */
-.card.big{padding:14px 18px 12px 46px;border-radius:9px}
-.card.big .num{position:absolute;left:0;top:0;width:46px;padding-top:15px;text-align:center;
-  font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700;color:var(--spark)}
-.card.big .t{font-size:16.5px;font-weight:600;line-height:1.28;letter-spacing:-.014em;margin:0 0 4px}
-.card.big .n{font-size:13px;line-height:1.45}
-.card.big .ex{font-size:12.5px;color:var(--faint);line-height:1.5;margin:8px 0 0;
-  padding-left:11px;border-left:2px solid var(--hair);overflow-wrap:anywhere;
-  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.card.big .f{margin-top:10px}
-.stage.is-out .card{background:transparent;box-shadow:none;color:var(--dead);border-style:dashed}
-.stage.is-out .card .n,.stage.is-out .card .ex,.stage.is-out .card .f{color:var(--dead)}
-.stage.is-out .card .num{color:var(--dead)}
-
-/* In the rail a card is a token: enough to recognise and to drag. */
-.card.slim{padding:7px 9px;box-shadow:none;background:var(--card)}
-.card.slim .t{font-size:12.5px;font-weight:400;margin:0;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.rail .col[data-k="out"] .card{background:transparent;border-style:dashed;color:var(--dead)}
-
-/* ---- sift: one card, four directions ---- */
-.sift{position:fixed;inset:0;z-index:120;background:var(--surface);display:flex;flex-direction:column;
-  opacity:0;pointer-events:none;transform:scale(.994);
-  transition:opacity .2s ease,transform .2s cubic-bezier(.2,.7,.3,1)}
-.sift.on{opacity:1;pointer-events:auto;transform:none}
-.sift-top{flex:none;display:flex;align-items:center;gap:12px;height:52px;padding:0 14px;border-bottom:1px solid var(--hair)}
-.sift-board{padding-left:11px;border-left:1px solid var(--rule);font-size:13.5px;font-weight:500;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:22ch}
-.sift-scope{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--faint);padding-left:11px;border-left:1px solid var(--rule)}
-.bdesc.static{cursor:default}
-.bdesc.static:hover{color:var(--faint)}
-.sift-stage{flex:1;min-height:0;display:grid;gap:10px;padding:12px;
-  grid-template-columns:minmax(140px,18vw) minmax(0,1fr) minmax(140px,18vw);
-  grid-template-rows:auto minmax(0,1fr) auto}
-.zone{position:relative;overflow:hidden;border:1px dashed var(--rule);background:none;border-radius:9px;
-  cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
-  padding:10px;color:var(--muted);
-  transition:background .14s,color .14s,border-color .14s,transform .14s}
-.zone:hover,.zone.armed{background:color-mix(in srgb,var(--spark) 14%,transparent);
-  border-color:var(--spark);border-style:solid;color:var(--ink)}
-/* The card lands in a zone; the zone should look like it caught something. */
-.zone.hit{animation:caught .42s cubic-bezier(.2,.7,.3,1)}
-@keyframes caught{
-  0%{background:color-mix(in srgb,var(--spark) 40%,transparent);border-color:var(--spark);
-     border-style:solid;color:var(--ink);transform:scale(1.012)}
-  100%{background:none;border-color:var(--rule);color:var(--muted);transform:none}}
-.zone.out.hit{animation-name:caught-out}
-@keyframes caught-out{
-  0%{background:color-mix(in srgb,var(--dead) 34%,transparent);border-color:var(--dead);
-     border-style:solid;transform:scale(1.012)}
-  100%{background:none;border-color:var(--rule);transform:none}}
-.zone .n.bump{animation:bump .42s cubic-bezier(.2,.7,.3,1)}
-@keyframes bump{0%{transform:translateY(-7px) scale(1.5);color:var(--spark);opacity:0}
-  40%{opacity:1}100%{transform:none;color:var(--faint)}}
-.zone .key{font-family:"JetBrains Mono",monospace;font-size:15px;line-height:1}
-.zone .lbl{font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.13em;
-  text-transform:uppercase}
-.zone .n{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--faint)}
-/* Horizontal is the call and vertical is the defer, so the two lanes that take
-   most of the votes get the full-height walls either side of the card and the
-   easiest keys to hit blind. */
-.zone.out{grid-column:1;grid-row:2}
-.zone.in{grid-column:3;grid-row:2}
-.zone.maybe{grid-column:2;grid-row:1;flex-direction:row;gap:10px}
-.zone.unsure{grid-column:2;grid-row:3;flex-direction:row;gap:10px}
-.zone.out:hover,.zone.out.armed{background:color-mix(in srgb,var(--dead) 20%,transparent);
-  border-color:var(--dead);color:var(--muted)}
-
-.deck{grid-column:2;grid-row:2;min-height:0;height:100%;display:flex;
-  align-items:center;justify-content:center;
-  transition:transform .18s cubic-bezier(.2,.7,.3,1)}
-.pile{position:relative;width:min(820px,100%);max-height:100%;display:flex}
-/* Leaning toward the zone you are about to pick, before you pick it. */
-.sift-stage:has(.zone.in:hover) .deck{transform:translateX(9px) rotate(.5deg)}
-.sift-stage:has(.zone.out:hover) .deck{transform:translateX(-9px) rotate(-.5deg)}
-.sift-stage:has(.zone.maybe:hover) .deck{transform:translateY(-6px)}
-.sift-stage:has(.zone.unsure:hover) .deck{transform:translateY(6px)}
-/* The queue as a pile: two card edges behind this one, so "13 left" is also
-   something you see thinning out. */
-.deck i{position:absolute;left:0;right:0;top:0;bottom:0;border-radius:11px;
-  background:color-mix(in srgb,var(--card) 78%,var(--bg));
-  border:1px solid var(--hair);pointer-events:none;transform-origin:50% 0;
-  transition:transform .22s cubic-bezier(.2,.7,.3,1),opacity .22s}
-.deck i.b1{transform:translateY(13px) scaleX(.985);opacity:.85}
-.deck i.b2{transform:translateY(25px) scaleX(.968);opacity:.55}
-/* One card, all of it, no scrolling: type is sized in em off --fit, and the
-   card is measured after render and scaled until the text fits the space it
-   has. A one-line idea comes out big; a long one comes out dense. */
-.sift-card{position:relative;z-index:1;flex:1;min-width:0;max-height:100%;overflow:hidden auto;
-  background:var(--card);border:1px solid var(--hair);border-radius:11px;box-shadow:var(--lift);
-  padding:clamp(16px,3vh,30px) clamp(18px,3.5vw,40px);display:flex;flex-direction:column;
-  font-size:calc(14px * var(--fit,1));gap:.85em}
-.sift-card.over{mask-image:linear-gradient(#000 88%,transparent)}
-.sift-card .src{font-family:"JetBrains Mono",monospace;font-size:.74em;letter-spacing:.13em;
-  text-transform:uppercase;color:var(--faint)}
-.sift-card h2{font-size:2.15em;font-weight:600;line-height:1.14;letter-spacing:-.028em;margin:0;
-  overflow-wrap:anywhere}
-.sift-card .body{font-size:1em;color:var(--muted);margin:0;max-width:64ch;line-height:1.6;
-  white-space:pre-wrap;overflow-wrap:anywhere;padding-left:.85em;border-left:2px solid var(--hair)}
-.sift-card .said{padding:.6em .85em;background:var(--sunk);border-radius:7px;
-  font-size:.92em;color:var(--muted);max-width:64ch;display:flex;flex-direction:column;gap:.55em}
-.sift-card .said p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
-.sift-card .said b{display:block;color:var(--faint);font-weight:500;font-family:"JetBrains Mono",monospace;
-  font-size:.72em;letter-spacing:.13em;text-transform:uppercase;margin-bottom:.15em}
-.sift-card .said b.agent{color:var(--spark)}
-.jot{display:flex;gap:8px;align-items:flex-start;margin:-.35em 0 0}
-.jot span{margin-top:.5em}
-.jot textarea{flex:1;min-width:0;max-width:52ch;background:none;border:0;resize:none;
-  overflow:hidden;display:block;line-height:1.42;
-  border-bottom:1px dashed transparent;padding:2px 0;font-size:1.06em;color:var(--muted)}
-.jot:hover textarea{border-bottom-color:var(--rule)}
-.jot textarea:focus{outline:none;color:var(--ink);border-bottom-color:var(--spark);border-bottom-style:solid}
-.jot input::placeholder{color:var(--faint)}
-.jot span{font-family:"JetBrains Mono",monospace;font-size:.7em;color:var(--faint);opacity:0}
-.jot:hover span,.jot textarea:focus + span{opacity:1}
-.sift-foot{flex:none;display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:11px 14px;
-  border-top:1px solid var(--hair);font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
-.meter{flex:1;min-width:100px;height:3px;background:var(--sunk);border-radius:2px;overflow:hidden}
-.meter i{display:block;height:100%;width:0;border-radius:2px;
-  background:linear-gradient(90deg,var(--cold),var(--spark));
-  transition:width .32s cubic-bezier(.2,.7,.3,1)}
-.meter i.full{animation:glow 1.1s ease-out}
-@keyframes glow{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--spark) 70%,transparent)}
-  100%{box-shadow:0 0 0 7px transparent}}
-.tally{display:flex;gap:10px}
-.tally b{color:var(--ink);font-weight:700}
-.tally .just{color:var(--spark);animation:bump .42s cubic-bezier(.2,.7,.3,1)}
-.left-n.tick{animation:tick .3s ease-out}
-@keyframes tick{0%{transform:translateY(-4px);opacity:.3}100%{transform:none;opacity:1}}
-.done{grid-column:1/-1;grid-row:1/-1;display:flex;flex-direction:column;justify-content:center;
-  padding:clamp(24px,6vh,60px) clamp(24px,5vw,70px);animation:rise .42s cubic-bezier(.2,.7,.3,1)}
-.done>*{animation:rise .5s cubic-bezier(.2,.7,.3,1) backwards}
-.done>*:nth-child(2){animation-delay:.06s}
-.done>*:nth-child(3){animation-delay:.12s}
-.done>*:nth-child(4){animation-delay:.18s}
-.done li{animation:rise .45s cubic-bezier(.2,.7,.3,1) backwards}
-@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-.done h2{font-family:"Martian Mono",monospace;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.05em;margin:0 0 8px}
-.done>p{color:var(--muted);margin:0 0 22px;max-width:56ch}
-.done ol{margin:0 0 24px;padding:0;list-style:none;counter-reset:w;max-width:660px}
-.done li{display:flex;gap:14px;align-items:baseline;overflow-wrap:anywhere;padding:9px 0;border-bottom:1px solid var(--hair);
-  counter-increment:w;font-size:15px}
-.done li::before{content:counter(w);font-family:"JetBrains Mono",monospace;font-size:11px;
-  color:var(--spark);font-weight:700;width:12px;flex:none}
-.done li span{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--faint);white-space:nowrap}
-.done-acts{display:flex;gap:10px;flex-wrap:wrap}
-
-.scrim{position:fixed;inset:0;z-index:130;background:rgba(10,13,15,.36);opacity:0;pointer-events:none;transition:opacity .2s}
-.scrim.on{opacity:1;pointer-events:auto}
-.drawer{position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);z-index:140;background:var(--surface);
-  border-left:1px solid var(--rule);box-shadow:var(--drop);display:flex;flex-direction:column;
-  transform:translateX(102%);transition:transform .24s cubic-bezier(.2,.7,.3,1)}
-.drawer.on{transform:none}
-.dw-top{flex:none;display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--hair)}
-.lanechip{appearance:none;background:var(--sunk);border:1px solid var(--hair);border-radius:5px;padding:4px 9px;
-  font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--muted);cursor:pointer}
-.srcchip{display:flex;align-items:center;gap:6px;font-family:"JetBrains Mono",monospace;font-size:10px;
-  letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
-.srcchip i{width:5px;height:5px;border-radius:50%;background:var(--cold)}
-.srcchip.agent i{background:var(--spark)}
-.dw-x{margin-left:auto;background:none;border:0;color:var(--faint);cursor:pointer;font-size:18px;
-  line-height:1;padding:2px 7px;border-radius:4px}
-.dw-x:hover{color:var(--ink);background:var(--sunk)}
-.dw-body{flex:1;min-height:0;overflow-y:auto;padding:16px 16px 22px}
-.dw-title,.dw-note{width:100%;background:none;border:0;padding:0;resize:none;overflow:hidden;display:block}
-.dw-title{font-size:20px;font-weight:600;line-height:1.24;letter-spacing:-.022em;margin:0 0 8px;
-  overflow-wrap:anywhere}
-.dw-note{font-size:13px;color:var(--muted);line-height:1.45;margin:0 0 16px}
-.dw-title:focus,.dw-note:focus{outline:none}
-.dw-stats{display:flex;flex-wrap:wrap;gap:0 22px;padding:12px 0;margin-bottom:18px;
-  border-top:1px solid var(--hair);border-bottom:1px solid var(--hair)}
-.dw-stats div{display:flex;flex-direction:column;gap:1px}
-.dw-stats dt{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--faint)}
-.dw-stats dd{margin:0;font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:500}
-.lbl{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
-  color:var(--faint);display:block;margin:0 0 7px}
-.dw-text{width:100%;min-height:104px;background:var(--card);color:var(--ink);border:1px solid var(--hair);
-  border-radius:7px;padding:11px 12px;font-size:13.5px;line-height:1.55;resize:none;overflow:hidden;
-  margin-bottom:20px}
-.dw-text:focus{outline:none;border-color:var(--rule);box-shadow:0 0 0 3px color-mix(in srgb,var(--spark) 20%,transparent)}
-.dw-text::placeholder,.composer textarea::placeholder{color:var(--faint)}
-.cmt{padding:11px 0;border-bottom:1px solid var(--hair)}
-.cmt:first-of-type{border-top:1px solid var(--hair)}
-.cmt-h{display:flex;align-items:center;gap:7px;margin-bottom:4px;font-family:"JetBrains Mono",monospace;
-  font-size:10px;color:var(--faint)}
-.cmt-h i{width:5px;height:5px;border-radius:50%;background:var(--cold);flex:none}
-.cmt-h.agent i{background:var(--spark)}
-.cmt-h b{color:var(--muted);font-weight:500;letter-spacing:.1em;text-transform:uppercase}
-.cmt p{margin:0;font-size:13.5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
-.cmt-empty{font-size:13px;color:var(--faint);padding:10px 0 4px;line-height:1.45;margin:0}
-.composer{display:flex;gap:8px;margin-top:12px}
-.composer textarea{flex:1;min-height:38px;max-height:120px;background:var(--card);color:var(--ink);
-  border:1px solid var(--hair);border-radius:7px;padding:9px 11px;font-size:13.5px;resize:none}
-.composer textarea:focus{outline:none;border-color:var(--rule)}
-.dw-foot{flex:none;display:flex;gap:9px;align-items:center;padding:11px 14px;border-top:1px solid var(--hair)}
 .danger:hover{color:var(--spark-ink);background:var(--spark);border-color:var(--spark)}
 .ghost.armed{color:var(--spark-ink);background:var(--spark);border-color:var(--spark);font-weight:600}
-.saved{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--faint);
-  opacity:0;transition:opacity .2s}
-.saved.on{opacity:1}
+.lbl{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);display:block;margin:0 0 7px}
 
 .sheet{position:fixed;inset:0;z-index:150;display:flex;align-items:center;justify-content:center;
   padding:24px;opacity:0;pointer-events:none;transition:opacity .18s}
@@ -462,98 +145,47 @@ button,input,textarea,select{font:inherit;color:inherit}
 .lanes4{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .sheet-acts{display:flex;gap:9px;align-items:center;justify-content:flex-end;margin-top:18px}
 .sheet-acts .danger{margin-right:auto}
-
-.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(14px);background:var(--ink);
-  color:var(--bg);border-radius:7px;padding:9px 15px;font-size:12.5px;box-shadow:var(--lift);
-  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:200;max-width:90vw}
-.toast.on{opacity:1;transform:translateX(-50%)}
-
 @media (max-width:860px){
-  .board{grid-template-columns:none !important;grid-template-rows:minmax(0,1.5fr) minmax(0,1fr)}
-  .stage{border-right:0;border-bottom:1px solid var(--rule)}
-  .stage .col-head,.stage .col-body,.stage .quick{padding-left:14px;padding-right:14px}
-  .rail .col-body{max-height:none}
-  .stat,.bdesc{display:none}
-  .find{width:104px}
-  .find:focus{width:min(220px,52vw)}
-  /* The phone story is the sift, so it gets the whole screen: card on top,
-     the four votes as a row of thumbs underneath (or swipe the card). */
-  .sift-stage{grid-template-columns:repeat(4,1fr);grid-template-rows:minmax(0,1fr) auto;gap:8px;padding:8px}
-  .deck{grid-column:1/-1;grid-row:1;align-self:stretch;width:100%}
-  .deck i{display:none}
-  .zone{grid-row:2 !important;flex-direction:column !important;gap:3px;padding:9px 4px}
-  .zone.out{grid-column:1}.zone.unsure{grid-column:2}.zone.maybe{grid-column:3}.zone.in{grid-column:4}
-  .zone .key{display:none}
-  .drawer{width:100vw}
-}
-/* Reduce, not remove. Blanking every duration to zero means someone with the
-   OS setting on gets no feedback at all — the flash, the fade and the counter
-   still say what happened; only the long travel and the leaning stop. */
-@media (prefers-reduced-motion:reduce){
-  .sift-stage:has(.zone:hover) .deck{transform:none}
-  .card.fresh{animation:none}
-  .done>*,.done li{animation:none}
-  .deck i{transition:none}
+  .end .ghost:not(#themeBtn){display:none}
+  .boardbtn{max-width:40vw}
 }
 </style>
 </head>
 <body>
 
-<div class="bar">
-  <span class="mark">pit</span>
-  <span class="boardsel">
-    <button class="boardbtn" id="boardBtn" type="button" aria-haspopup="listbox" aria-expanded="false">
-      <b id="boardBtnName">…</b><i class="chev"></i>
-    </button>
-    <div class="pop" id="boardPop" hidden>
-      <input id="popQ" placeholder="Filter boards…" autocomplete="off" aria-label="Filter boards">
-      <div class="pop-all" id="popAll"></div>
-      <div class="pop-list" id="popList" role="listbox"></div>
-      <div class="pop-foot"><button class="pop-new" id="popNew" type="button">New board…</button>
-        <span class="pop-hint">B</span></div>
-    </div>
-  </span>
-  <span class="bdesc" id="bdesc" title="Click to edit"></span>
-  <span class="bar-sp"></span>
-  <input class="find" id="find" placeholder="Find  /" autocomplete="off" aria-label="Find an idea">
-  <span class="stat" id="statEl"></span>
-  <button class="ghost" id="newBoardBtn" type="button">New board</button>
-  <button class="ghost" id="undoBtn" type="button" title="Put the last card back where it was">Undo</button>
-  <button class="ghost" id="themeBtn" type="button">dark</button>
-  <button class="go" id="siftBtn" type="button"><span id="siftWhat">Sift</span> <span class="n" id="siftN">0</span> <kbd>S</kbd></button>
-</div>
-
-<main class="board" id="board"></main>
-
-<div class="sift" id="sift" aria-hidden="true">
-  <div class="sift-top">
+<pit-board id="pit">
+  <span class="start" slot="start">
     <span class="mark">pit</span>
-    <span class="sift-board" id="siftBoard"></span>
-    <span class="bdesc static" id="siftDesc"></span>
-    <span class="sift-scope" id="siftScope"></span>
-    <span class="bar-sp"></span>
-    <button class="ghost" id="undoSift" type="button">Undo <kbd>U</kbd></button>
-    <button class="ghost" id="closeSift" type="button">Back to board · Esc</button>
-  </div>
-  <div class="sift-stage" id="stage"></div>
-  <div class="sift-foot" id="siftFoot"></div>
-</div>
-
-<div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer" aria-hidden="true"></aside>
+    <span class="boardsel">
+      <button class="boardbtn" id="boardBtn" type="button" aria-haspopup="listbox" aria-expanded="false">
+        <b id="boardBtnName">…</b><i class="chev"></i>
+      </button>
+      <div class="pop" id="boardPop" hidden>
+        <input id="popQ" placeholder="Filter boards…" autocomplete="off" aria-label="Filter boards">
+        <div class="pop-all" id="popAll"></div>
+        <div class="pop-list" id="popList" role="listbox"></div>
+        <div class="pop-foot"><button class="pop-new" id="popNew" type="button">New board…</button>
+          <span class="pop-hint">B</span></div>
+      </div>
+    </span>
+  </span>
+  <span class="end" slot="end">
+    <button class="ghost" id="newBoardBtn" type="button">New board</button>
+    <button class="ghost" id="themeBtn" type="button">dark</button>
+  </span>
+</pit-board>
 
 <div class="sheet" id="sheet" aria-hidden="true">
   <div class="sheet-bg" data-close="1"></div>
   <div class="sheet-in" id="sheetIn"></div>
 </div>
 
-<div class="toast" id="toast"></div>
+<script type="module">
+import { mountPit, restStore } from '/pit.js';
 
-<script>
-(function(){
-'use strict';
-
-/* ------------------------------ plumbing ------------------------------ */
+/* pit's own app: the board itself is pit.js; what is here is what makes it a
+   website with many boards: login, the picker, the everything view, share
+   links, the theme switch and the address bar. */
 async function api(path, opts){
   const r = await fetch(path, Object.assign({headers:{'content-type':'application/json'}}, opts||{}));
   if(r.status===401){ location.href='/login'; throw new Error('signed out'); }
@@ -563,880 +195,46 @@ async function api(path, opts){
   return body;
 }
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function ago(iso){
-  const d = (Date.now()-new Date(iso))/1000;
-  if(d<3600) return Math.max(1,Math.round(d/60))+'m';
-  if(d<86400) return Math.round(d/3600)+'h';
-  if(d<86400*30) return Math.round(d/86400)+'d';
-  return Math.round(d/86400/30)+'mo';
-}
-
-/* Lanes are the same five on every board — a board may rename one, never add
-   one, which is what lets four keys cover the whole vocabulary. */
 const LANES = ['unsorted','in','maybe','unsure','out'];
-const VOTES = ['in','maybe','unsure','out'];
-/* `done` is a section, not a lane. The model has five lanes because the sift
-   has four keys and a queue; the view has six columns because a shipped card
-   and a rejected one both live in `out` and must not read the same. Everything
-   that decides — the sift, the vote counts, the API — still sees five. */
 const SECTIONS = ['unsorted','in','maybe','unsure','done','out'];
-const ARROW = {in:'→', maybe:'↑', unsure:'↓', out:'←'};
-/* How a card ended. Only `out` carries one, and only from the board — the
-   sift's left arrow is still one keypress that means no, because "I built
-   this" is not a judgement you make in a queue. */
-const REASON = {done:'done', handed:'handed off'};
-const KEYLANE = {ArrowRight:'in', ArrowLeft:'out', ArrowUp:'maybe', ArrowDown:'unsure'};
-
-const $ = id => document.getElementById(id);
-const board=$('board'), statEl=$('statEl'), bdesc=$('bdesc'), siftEl=$('sift'),
-      stage=$('stage'), sfoot=$('siftFoot'), sscope=$('siftScope'), drawer=$('drawer'),
-      scrim=$('scrim'), sheet=$('sheet'), sheetIn=$('sheetIn'),
-      boardBtn=$('boardBtn'), boardPop=$('boardPop'), popQ=$('popQ'), popList=$('popList'),
-      popAll=$('popAll'), find=$('find');
-
-let boards=[], B=null, ideas=[], sel=null, fresh=new Set(), routing=false;
-/* The everything view: no board is current, `ideas` holds every board's `in`
-   lane at once, and each board still gets its own stage inside it. */
-let allMode=false, allBoards=[];
 const ALL_LANE = 'in';
-const kept = bid => ideas.filter(x => x.board_id===bid && x.lane===ALL_LANE);
-const labelOf = (bd,l) => (bd.labels && bd.labels[l]) || l;
+const $ = id => document.getElementById(id);
+const sheet=$('sheet'), sheetIn=$('sheetIn'), boardBtn=$('boardBtn'), boardPop=$('boardPop'),
+      popQ=$('popQ'), popList=$('popList'), popAll=$('popAll');
 
-const label = l => (B && B.labels && B.labels[l]) || l;
-const inLane = l => ideas.filter(i => i.lane === l);
-/* The filter is a lens on the board, never on the truth: inLane stays the lane
-   as it is, and only what gets painted is narrowed. So a drop still lands
-   between its real neighbours, and the sift still walks the whole pile. */
-// `out` shows what you said no to; `done` shows what left because it became
-// real. Same lane underneath, told apart by the reason on the burial.
-const section = k => k==='done' ? inLane('out').filter(x=>x.reason)
-                   : k==='out'  ? inLane('out').filter(x=>!x.reason)
-                   : inLane(k);
-let query = '';
-const matches = x => !query ||
-  (x.title+' '+(x.note||'')+' '+(x.body||'')+' '+(REASON[x.reason]||'')).toLowerCase().includes(query);
-const showing = l => section(l).filter(matches);
-const byId = id => ideas.find(i => i.id === id);
-const nLive = () => ideas.filter(i => i.lane !== 'out').length;
-
-async function loadBoards(){
-  const r = await api('/api/boards');
-  boards = r.boards||[];
-}
-async function loadBoard(slug){
-  const r = await api('/api/boards/'+encodeURIComponent(slug)+'/ideas');
-  B = r.board; ideas = r.ideas||[]; sel=null; fresh.clear(); stageLane = 'in';
-  allMode = false; board.classList.remove('all');
-  $('boardBtnName').textContent = B.name;
-  bdesc.textContent = B.description || 'add a description';
-  document.title = 'pit · '+B.name;
-}
-async function reload(keepFresh){
-  const prev = snapshot();
-  if(allMode){ await loadAll(); }
-  else {
-    const r = await api('/api/boards/'+encodeURIComponent(B.slug)+'/ideas');
-    ideas = r.ideas||[]; B = r.board;
-  }
-  if(!keepFresh) fresh.clear();
-  paint(prev);
-}
-async function loadAll(){
+let boards=[], slug=null, allMode=false, routing=false, P=null;
+const boardStore = s => restStore(s, {request: api});
+const allStore = () => ({ ...restStore('', {request: api}), async list(){
   const r = await api('/api/all');
-  allBoards = (r.boards||[]).map(g=>g.board);
-  ideas = (r.boards||[]).flatMap(g=>g.ideas);
-  ideas.sort(order);
-  allMode = true; B = null; sel = null;
-  board.classList.add('all');
-  $('boardBtnName').textContent = 'everything';
-  bdesc.textContent = 'what you are keeping, on every board';
-  document.title = 'pit · everything';
-}
+  return { groups: (r.boards||[]).map(g=>g.board), cards: (r.boards||[]).flatMap(g=>g.ideas),
+           board: {name:'everything', description:'what you are keeping, on every board'} };
+}});
+const toast = m => P.toast(m);
 
-/* ------------------------------ board ------------------------------
-   One lane holds the stage and the rest are a rail beside it. The stage is
-   `in` by default, because after a sift that is the answer and the answer
-   should not be a narrow column at the far right. Any rail lane can take the
-   stage, so reading the maybes — or the graveyard — never leaves the board. */
-let stageLane = 'in';
-
-const excerpt = (s,n=200) => { s=(s||'').replace(/\s+/g,' ').trim();
-  return s.length>n ? s.slice(0,n-1)+'…' : s; };
-
-function cardHTML(x, i, big){
-  const f = `<div class="f">
-      <span class="src ${x.source==='agent'?'agent':''}" title="${x.source==='agent'?'from an agent':'yours'}"></span>
-      ${x.reason?`<span class="why ${x.reason==='done'?'done':''}">${REASON[x.reason]||x.reason}</span>`:''}
-      ${x.comment_count?`<span title="${x.comment_count} note${x.comment_count===1?'':'s'}">✎${x.comment_count}</span>`:''}
-      <span class="age">${ago(x.created_at)}</span>
-    </div>`;
-  if(!big) return `<article class="card slim${x.reason?' marked':''}${fresh.has(x.id)?' fresh':''}${sel===x.id?' sel':''}"
-    draggable="true" tabindex="0" data-id="${x.id}">${
-      x.reason?`<span class="why ${x.reason==='done'?'done':''}">${REASON[x.reason]||x.reason}</span>`:''
-    }<p class="t">${esc(x.title)}</p></article>`;
-  return `<article class="card big${fresh.has(x.id)?' fresh':''}${sel===x.id?' sel':''}"
-    draggable="true" tabindex="0" data-id="${x.id}">
-    <span class="num">${i+1}</span>
-    <p class="t">${esc(x.title)}</p>
-    ${x.note?`<p class="n">${esc(x.note)}</p>`:''}
-    ${x.body?`<p class="ex">${esc(excerpt(x.body))}</p>`:''}
-    ${f}</article>`;
-}
-function snapshot(){
-  const m={}; board.querySelectorAll('.card').forEach(c=>m[c.dataset.id]=c.getBoundingClientRect()); return m;
-}
-function emptyLine(k, filtered){
-  if(filtered) return `No match for “${esc(query)}” in ${esc(label(k))}.`;
-  if(k==='unsorted') return 'Nothing waiting. Drop ideas here — or let an agent.';
-  if(k==='done') return 'Nothing shipped yet. D on a card marks it done, H hands it off.';
-  if(k==='out') return 'Nothing buried yet.';
-  if(k===stageLane) return `Nothing in ${esc(label(k))} yet. Sift the queue and what you keep lands here.`;
-  return 'Empty.';
-}
-// The board's only key legend, and only where the keys apply.
-function hint(k, n){
-  const parts = [];
-  if(n > 1) parts.push('drag or J/K to order');
-  if(LANES.includes(k) && k !== 'out') parts.push('D done · H handed off');
-  return parts.length ? `<span class="col-hint">${parts.join(' · ')}</span>` : '';
-}
-// While filtering, a lane says how much of it you are looking at.
-const laneCount = (all, some) => query ? `${some.length}/${all.length}` : String(all.length);
-function paint(prev){
-  if(allMode) return paintAll(prev);
-  if(!B) return;
-  if(!SECTIONS.includes(stageLane)) stageLane = 'in';
-  const scroll={}; board.querySelectorAll('.col-body').forEach(b=>scroll[b.dataset.k]=b.scrollTop);
-
-  const all = section(stageLane), g = all.filter(matches);
-  const stage = `<section class="col stage${stageLane==='out'?' is-out':''}" data-k="${stageLane}">
-      <header class="col-head">
-        <span class="col-name">${esc(label(stageLane))}</span><span class="col-n">${laneCount(all,g)}</span>
-        ${all.length&&LANES.includes(stageLane)&&stageLane!=='out'?`<button class="col-sift" type="button" data-scope="${stageLane}">sift</button>`:''}
-        ${g.length?'<button class="col-sift" type="button" data-copy="1" title="Copy this lane as markdown — shift for the bodies too">copy</button>':''}
-        ${all.length?'<button class="col-sift" type="button" data-share="1" title="A read-only link to this lane, for someone who is not you">share</button>':''}
-        ${hint(stageLane, all.length)}
-      </header>
-      <div class="col-body" data-k="${stageLane}">
-        ${g.length ? g.map(x=>cardHTML(x,all.indexOf(x),true)).join('')
-                   : `<div class="col-empty">${emptyLine(stageLane, all.length>0)}</div>`}
-      </div>
-      ${LANES.includes(stageLane)&&stageLane!=='out'?`<div class="quick"><input data-lane="${stageLane}" placeholder="Add to ${esc(label(stageLane))}…" autocomplete="off"></div>`:''}
-    </section>`;
-
-  const rail = SECTIONS.filter(k=>k!==stageLane).map(k=>{
-    const l = section(k), v = showing(k);
-    return `<section class="col${k==='done'?' is-done':''}" data-k="${k}">
-      <header class="col-head" role="button" tabindex="0" data-stage="${k}">
-        <span class="col-name">${esc(label(k))}</span><span class="col-n">${laneCount(l,v)}</span>
-        ${l.length&&LANES.includes(k)&&k!=='out'?`<button class="col-sift" type="button" data-scope="${k}">sift</button>`:''}
-      </header>
-      <div class="col-body" data-k="${k}">
-        ${v.length ? v.map(x=>cardHTML(x,0,false)).join('')
-                   : `<div class="col-empty">${emptyLine(k, l.length>0)}</div>`}
-      </div>
-      ${k==='unsorted'?`<div class="quick"><input data-lane="unsorted" placeholder="Add an idea…" autocomplete="off"></div>`:''}
-    </section>`;
-  }).join('');
-
-  board.innerHTML = stage + `<aside class="rail">${rail}</aside>`;
-
-  board.querySelectorAll('.col-body').forEach(b=>{ if(scroll[b.dataset.k]) b.scrollTop=scroll[b.dataset.k]; });
-  flip(prev);
-  drawStat();
-}
-// A card that moved slides from where it was.
-function flip(prev){
-  if(!prev) return;
-  board.querySelectorAll('.card').forEach(c=>{
-    const was=prev[c.dataset.id]; if(!was) return;
-    const now=c.getBoundingClientRect(), dx=was.left-now.left, dy=was.top-now.top;
-    if(!dx&&!dy) return;
-    c.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:'none'}],
-              {duration:260,easing:'cubic-bezier(.2,.7,.3,1)'});
-  });
-}
-function paintAll(prev){
-  const scroll = board.querySelector('.all-scroll')?.scrollTop || 0;
-  board.innerHTML = `<div class="all-scroll">` + (allBoards.length ? allBoards.map(bd=>{
-    const all = kept(bd.id), show = all.filter(matches);
-    return `<section class="col stage" data-k="${ALL_LANE}" data-b="${esc(bd.id)}">
-      <header class="col-head">
-        <button class="col-name" type="button" data-go="${esc(bd.slug)}">${esc(bd.name)}</button>
-        <span class="col-n">${laneCount(all,show)}</span>
-        <span class="col-hint">${esc(labelOf(bd,ALL_LANE))}</span>
-      </header>
-      <div class="col-body" data-k="${ALL_LANE}" data-b="${esc(bd.id)}">
-        ${show.length ? show.map(x=>cardHTML(x, all.indexOf(x), true)).join('')
-          : `<div class="col-empty">${all.length
-              ? `No match for “${esc(query)}” in ${esc(bd.name)}.`
-              : `Nothing kept on ${esc(bd.name)} yet.`}</div>`}
-      </div></section>`;
-  }).join('') : '<div class="col-empty">No boards yet.</div>') + `</div>`;
-  const sc = board.querySelector('.all-scroll'); if(sc) sc.scrollTop = scroll;
-  flip(prev);
-  drawStat();
-}
-function setStage(k){
-  if(!SECTIONS.includes(k) || k===stageLane) return;
-  stageLane = k; paint(null); writeHash();
-}
-function drawStat(){
-  statEl.textContent = query
-    ? `${ideas.filter(matches).length} of ${ideas.length} match`
-    : allMode ? `${ideas.length} kept · ${allBoards.length} boards`
-              : `${nLive()} live · ${section('done').length} done · ${section('out').length} out`;
-  if(allMode){
-    $('siftN').textContent = 0; $('siftWhat').textContent = 'Sift';
-    $('siftBtn').disabled = true; $('siftBtn').title = 'open a board to sift it';
+/* Registered before the board mounts, so a key the app takes never reaches it. */
+document.addEventListener('keydown', e=>{
+  if(sheet.classList.contains('on')){
+    if(e.key==='Escape'){ e.preventDefault(); closeSheet(); }
+    else if(!/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) e.preventDefault();
     return;
   }
-  const s = nextScope();
-  $('siftN').textContent = s ? inLane(s).length : 0;
-  $('siftWhat').textContent = s && s!=='unsorted' ? 'Sift '+label(s) : 'Sift';
-  $('siftBtn').disabled = !s;
-  $('siftBtn').title = s ? `go through ${label(s)}, one card at a time` : 'nothing waiting';
-}
-/* What the big button sifts: the queue first, then the pile you owed a second
-   look, then the middle. Nothing left means the button has no job. */
-function nextScope(){
-  for(const l of ['unsorted','unsure','maybe']) if(inLane(l).length) return l;
-  return null;
-}
-
-board.addEventListener('keydown', async e=>{
-  const input = e.target.closest('.quick input');
-  if(input){
-    if(e.key!=='Enter') return;
-    e.preventDefault();
-    const title = input.value.trim(); if(!title) return;
-    input.value='';
-    try{
-      const r = await api(`/api/boards/${encodeURIComponent(B.slug)}/ideas`, {method:'POST',
-        body: JSON.stringify({ideas:[{title, lane: input.dataset.lane}]})});
-      (r.ideas||[]).forEach(x=>fresh.add(x.id));
-      await reload(true);
-      const again = board.querySelector(`.quick input[data-lane="${input.dataset.lane}"]`);
-      if(again) again.focus();
-    }catch(err){ toast(err.message); }
-    return;
-  }
-  const h = e.target.closest('[data-stage]');
-  if(h && (e.key==='Enter'||e.key===' ')){ e.preventDefault(); return setStage(h.dataset.stage); }
-  const c = e.target.closest('.card');
-  if(c && (e.key==='ArrowLeft'||e.key==='ArrowRight')){
-    e.preventDefault();
-    const k = c.closest('.col').dataset.k;
-    const i = LANES.indexOf(k==='done' ? 'out' : k);
-    const to = e.key==='ArrowRight' ? i+1 : i-1;
-    if(to<0||to>=LANES.length) return;
-    await move(c.dataset.id, LANES[to]);
-    return refocus(c.dataset.id);
-  }
-  /* Across is which lane, along is where in it. With the duel shelved the
-     order of `in` is the whole ranking, and drag was the only way to set it —
-     which made the answer mouse-only. */
-  if(c && (e.key==='j'||e.key==='k'||e.key==='ArrowDown'||e.key==='ArrowUp')){
-    e.preventDefault();
-    await nudge(c.dataset.id, (e.key==='j'||e.key==='ArrowDown') ? 1 : -1);
-    return refocus(c.dataset.id);
-  }
-  /* The exits that are not a no. A card leaves `in` because it became real,
-     and saying which — here, in the second you know it — is what stops the
-     graveyard from reading as a pile of rejections. */
-  if(c && /^[dhDH]$/.test(e.key)){
-    e.preventDefault();
-    const reason = e.key.toLowerCase()==='d' ? 'done' : 'handed';
-    const it = byId(c.dataset.id);
-    if(!it) return;
-    if(it.lane==='out' && it.reason===reason) return;
-    await move(c.dataset.id, 'out', undefined, reason);
-    toast(`buried as ${REASON[reason]} — u puts it back`);
-    return;
-  }
-  if(c && e.key==='Enter'){ e.preventDefault(); openDrawer(c.dataset.id); }
-});
-function refocus(id){
-  const again = board.querySelector(`.card[data-id="${id}"]`);
-  if(again){ again.focus(); again.scrollIntoView({block:'nearest'}); }
-}
-async function nudge(id, dir){
-  const it = byId(id); if(!it) return;
-  const g = siblings(it), at = g.findIndex(x=>x.id===id), to = at+dir;
-  if(at<0 || to<0 || to>=g.length) return;
-  const rest = g.filter(x=>x.id!==id);
-  await move(id, it.lane, between(rest[to-1], rest[to]), it.reason);
-}
-// The list a card is ordered inside: its lane on a board, or its own board's
-// slice of the everything view.
-const siblings = it => allMode ? kept(it.board_id)
-                     : section(it.lane==='out' && it.reason ? 'done' : it.lane);
-const groupIn = col => col.dataset.b ? kept(col.dataset.b) : section(col.dataset.k);
-
-// Halfway between the neighbours it ends up with, or a step past the end.
-// A drag, a fingertip and a J/K nudge all land through this.
-const between = (above, below) =>
-  above && below ? (above.pos+below.pos)/2 : above ? above.pos+1 : below ? below.pos-1 : 1;
-
-// Dropping onto a column: the card above the midpoint you released over wins.
-async function dropOn(item, col, clientY, over){
-  // Nothing crosses a board here: the everything view shows four answers side
-  // by side, it does not merge them.
-  if(col.dataset.b && col.dataset.b !== item.board_id)
-    return toast('a card stays on the board you sifted it on');
-  // Dropping on `done` says how it ended; dropping on `out` says it was a no,
-  // which is why dragging a shipped card back there un-ships it.
-  const k = col.dataset.k;
-  const to = k==='done' ? 'out' : k;
-  const reason = k==='done' ? (item.reason || 'done') : '';
-  const group = groupIn(col).filter(x=>x.id!==item.id);
-  let idx = group.length;
-  if(over && over.dataset.id!==item.id){
-    const at = group.findIndex(x=>x.id===over.dataset.id);
-    if(at>=0){ const r=over.getBoundingClientRect(); idx = clientY>r.top+r.height/2 ? at+1 : at; }
-  }
-  await move(item.id, to, between(group[idx-1], group[idx]), reason);
-}
-
-async function move(id, lane, pos, reason){
-  const prev = snapshot();
-  const it = byId(id); if(!it) return;
-  try{
-    const r = await api(`/api/ideas/${id}/place`,
-      {method:'POST', body: JSON.stringify({lane, pos, reason})});
-    Object.assign(it, r);
-    ideas.sort(order);
-    paint(prev);
-  }catch(e){ toast(e.message); }
-}
-// Same order the server sends: best lane first, then hand position.
-const RANK = {in:0, maybe:1, unsure:2, unsorted:3, out:4};
-const order = (a,b) => (RANK[a.lane]-RANK[b.lane]) || (a.pos-b.pos) || (a.id<b.id?-1:1);
-
-/* ------------------------------ drag ------------------------------ */
-let dragId=null;
-board.addEventListener('dragstart', e=>{
-  const c=e.target.closest('.card'); if(!c) return;
-  dragId=c.dataset.id; c.classList.add('dragging');
-  e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', dragId);
-});
-board.addEventListener('dragend', e=>{
-  const c=e.target.closest('.card'); if(c) c.classList.remove('dragging');
-  board.querySelectorAll('.col.over').forEach(x=>x.classList.remove('over'));
-  dragId=null;
-});
-board.addEventListener('dragover', e=>{
-  const col=e.target.closest('.col'); if(!col||!dragId) return;
-  e.preventDefault();
-  board.querySelectorAll('.col.over').forEach(x=>{ if(x!==col) x.classList.remove('over'); });
-  col.classList.add('over');
-});
-board.addEventListener('drop', async e=>{
-  const col=e.target.closest('.col'); if(!col||!dragId) return;
-  e.preventDefault(); col.classList.remove('over');
-  const item=byId(dragId); if(!item) return;
-  await dropOn(item, col, e.clientY, e.target.closest('.card'));
+  if(!boardPop.hidden){ if(e.key==='Escape'){ e.preventDefault(); closePop(); boardBtn.focus(); } return; }
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if(typing || e.metaKey || e.ctrlKey || e.altKey || P?.view.sift || P?.view.open) return;
+  if(e.key==='b'||e.key==='B'){ e.preventDefault(); openPop(); }
 });
 
-/* ------------------------------ touch drag ------------------------------
-   Native HTML5 drag is desktop-only, so on a finger a long press picks the
-   card up. Below the press, and below 10px of travel, the gesture is still a
-   scroll — which is what a column full of cards mostly needs it to be. */
-let held=null, hold=null, holdAt=null;
-
-board.addEventListener('pointerdown', e=>{
-  if(e.pointerType==='mouse' || e.target.closest('input,textarea,button')) return;
-  const c = e.target.closest('.card'); if(!c) return;
-  holdAt = {x:e.clientX, y:e.clientY, id:e.pointerId};
-  hold = setTimeout(()=>{ hold=null; lift(c); }, 340);
+P = mountPit($('pit'), {
+  store: { list: async()=>({cards:[]}) },
+  onBoard(b, {groups}){
+    $('boardBtnName').textContent = groups ? 'everything' : b.name;
+    document.title = groups ? 'pit · everything' : 'pit · '+b.name;
+  },
+  onDescClick: () => editBoard(),
+  onGroup: g => choose(g.slug),
+  onView: writeHash,
+  stageActions: [{label:'share', title:'A read-only link to this lane, for someone who is not you', run: lane => shareStage(lane)}],
 });
-board.addEventListener('pointermove', e=>{
-  if(hold && Math.hypot(e.clientX-holdAt.x, e.clientY-holdAt.y) > 10){ clearTimeout(hold); hold=null; }
-  if(!held) return;
-  held.moved = true;
-  held.el.style.left = (e.clientX - held.gx) + 'px';
-  held.el.style.top  = (e.clientY - held.gy) + 'px';
-  const col = colUnder(e.clientX, e.clientY);
-  board.querySelectorAll('.col.over').forEach(x=>{ if(x!==col) x.classList.remove('over'); });
-  if(col) col.classList.add('over');
-});
-// touch-action cannot be changed mid-gesture, so the scroll is refused here
-// instead — and only once the press has already turned into a drag.
-board.addEventListener('touchmove', e=>{ if(held) e.preventDefault(); }, {passive:false});
-board.addEventListener('pointerup', async e=>{
-  if(hold){ clearTimeout(hold); hold=null; }
-  if(!held) return;
-  const item = byId(held.id), moved = held.moved;
-  const col = colUnder(e.clientX, e.clientY), over = cardUnder(e.clientX, e.clientY, held.id);
-  drop();
-  // A press that never travelled is not a drag: leave the card where it is
-  // rather than writing a decision to the log for a finger that changed its
-  // mind. The tap it turns into still opens the card.
-  if(moved && item && col) await dropOn(item, col, e.clientY, over);
-});
-// The tap that ends a drag would otherwise open the card it just moved.
-board.addEventListener('click', e=>{
-  if(!swallow) return;
-  swallow = false; e.stopPropagation(); e.preventDefault();
-}, true);
-board.addEventListener('contextmenu', e=>{ if(held) e.preventDefault(); });
-board.addEventListener('pointercancel', ()=>{ if(hold){ clearTimeout(hold); hold=null; } drop(); });
-
-function lift(c){
-  const r = c.getBoundingClientRect();
-  try{ c.setPointerCapture(holdAt.id); }catch(_){}   // so a release off the board still lands
-  const el = c.cloneNode(true);
-  el.classList.add('lifted');
-  Object.assign(el.style, {left:r.left+'px', top:r.top+'px', width:r.width+'px'});
-  document.body.appendChild(el);
-  held = {id:c.dataset.id, el, src:c, gx:holdAt.x-r.left, gy:holdAt.y-r.top, moved:false};
-  c.classList.add('dragging'); board.classList.add('holding');
-  if(navigator.vibrate) navigator.vibrate(12);
-}
-let swallow = false;
-function drop(){
-  if(!held) return;
-  swallow = held.moved;
-  held.el.remove(); held.src.classList.remove('dragging'); board.classList.remove('holding');
-  board.querySelectorAll('.col.over').forEach(x=>x.classList.remove('over'));
-  held = null;
-}
-// The lifted clone is under the finger, so it has to be looked past.
-function under(x, y, sel){
-  const was = held && held.el.style.display;
-  if(held) held.el.style.display='none';
-  const el = document.elementFromPoint(x, y);
-  if(held) held.el.style.display = was || '';
-  return el && el.closest(sel);
-}
-const colUnder = (x,y) => under(x, y, '.col');
-const cardUnder = (x,y,not) => { const c = under(x, y, '.card'); return c && c.dataset.id!==not ? c : null; };
-
-/* ------------------------------ drawer ------------------------------ */
-async function openDrawer(id){
-  const x = await api('/api/ideas/'+id);
-  sel = id;
-  const i = ideas.findIndex(v=>v.id===id); if(i>=0) Object.assign(ideas[i], {comment_count:(x.comments||[]).length});
-  const cmts = x.comments||[];
-  drawer.innerHTML = `
-  <div class="dw-top">
-    <select class="lanechip" id="dwLane">${LANES.map(k=>`<option value="${k}"${k===x.lane?' selected':''}>${esc(label(k))}</option>`).join('')}</select>
-    <select class="lanechip" id="dwReason"${x.lane==='out'?'':' hidden'} title="How this one ended">
-      <option value=""${x.reason?'':' selected'}>no</option>
-      ${Object.keys(REASON).map(k=>`<option value="${k}"${k===x.reason?' selected':''}>${REASON[k]}</option>`).join('')}
-    </select>
-    <span class="srcchip ${x.source==='agent'?'agent':''}"><i></i>${x.source==='agent'?'from an agent':'yours'}</span>
-    <button class="dw-x" id="dwX" type="button" aria-label="Close">×</button>
-  </div>
-  <div class="dw-body">
-    <textarea class="dw-title" id="dwTitle" rows="1">${esc(x.title)}</textarea>
-    <textarea class="dw-note" id="dwNote" rows="1" placeholder="one line — what it is">${esc(x.note)}</textarea>
-    <div class="dw-stats">
-      <div><dt>lane</dt><dd>${esc(label(x.lane))}${x.reason?` · ${REASON[x.reason]}`:''}</dd></div>
-      <div><dt>added</dt><dd>${ago(x.created_at)} ago</dd></div>
-      <div><dt>from</dt><dd>${x.source==='agent'?'agent':'me'}</dd></div>
-    </div>
-    <label class="lbl" for="dwBody">Body</label>
-    <textarea class="dw-text" id="dwBody" placeholder="What is the actual idea? The sift shows this — it is what you decide on.">${esc(x.body)}</textarea>
-    <label class="lbl">Notes${cmts.length?' · '+cmts.length:''}</label>
-    ${cmts.length ? cmts.map(c=>`<div class="cmt"><div class="cmt-h ${c.who==='agent'?'agent':''}"><i></i><b>${c.who==='agent'?'agent':'you'}</b></div><p>${esc(c.text)}</p></div>`).join('')
-      : '<p class="cmt-empty">Nothing here yet. Worth a line if there is something you would forget before you look at this again.</p>'}
-    <div class="composer">
-      <textarea id="dwCmt" rows="1" placeholder="Add a note"></textarea>
-      <button class="ghost" id="dwSend" type="button">Post</button>
-    </div>
-  </div>
-  <div class="dw-foot">
-    <button class="ghost danger" id="dwBury" type="button">${x.lane==='out'?'Dig up':'Bury'}</button>
-    <button class="ghost" id="dwDel" type="button">Delete</button>
-    <span class="saved" id="dwSaved">saved</span>
-  </div>`;
-  drawer.classList.add('on'); drawer.setAttribute('aria-hidden','false');
-  scrim.classList.add('on'); paint(snapshot()); writeHash();
-
-  const grow = el => { el.style.height='auto'; el.style.height=el.scrollHeight+'px'; };
-  const T=$('dwTitle'), N=$('dwNote'), BD=$('dwBody');
-  [T,N,BD].forEach(el=>{ grow(el); el.addEventListener('input',()=>grow(el)); });
-  T.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); T.blur(); } });
-
-  let t=null;
-  const flash = () => { const s=$('dwSaved'); if(!s) return; s.classList.add('on');
-    setTimeout(()=>{ const q=$('dwSaved'); if(q) q.classList.remove('on'); }, 900); };
-  const save = patch => {
-    clearTimeout(t);
-    t = setTimeout(async ()=>{
-      try{ await api('/api/ideas/'+id, {method:'PATCH', body: JSON.stringify(patch)});
-           flash(); await reload(true);
-      }catch(e){ toast(e.message); }
-    }, 450);
-  };
-  T.addEventListener('input', ()=>save({title:T.value.trim()}));
-  N.addEventListener('input', ()=>save({note:N.value.trim()}));
-  BD.addEventListener('input', ()=>save({body:BD.value}));
-
-  $('dwLane').addEventListener('change', async e=>{ await move(id, e.target.value); openDrawer(id); });
-  $('dwReason').addEventListener('change', async e=>{ await move(id, 'out', undefined, e.target.value); openDrawer(id); });
-  $('dwX').addEventListener('click', closeDrawer);
-  $('dwBury').addEventListener('click', async ()=>{
-    await move(id, x.lane==='out' ? 'unsorted' : 'out'); closeDrawer();
-  });
-  $('dwDel').addEventListener('click', async ()=>{
-    if(!confirm('Delete this idea? Burying keeps it out of the way without losing it.')) return;
-    try{ await api('/api/ideas/'+id,{method:'DELETE'}); closeDrawer(); await reload(); toast('deleted'); }
-    catch(e){ toast(e.message); }
-  });
-  const send = async ()=>{
-    const box=$('dwCmt'), v=box.value.trim(); if(!v) return;
-    try{ await api(`/api/ideas/${id}/comments`,{method:'POST',body:JSON.stringify({text:v})});
-         box.value=''; await openDrawer(id); }
-    catch(e){ toast(e.message); }
-  };
-  $('dwSend').addEventListener('click', send);
-  $('dwCmt').addEventListener('keydown', e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); send(); } });
-}
-function closeDrawer(){
-  drawer.classList.remove('on'); drawer.setAttribute('aria-hidden','true');
-  scrim.classList.remove('on'); sel=null; paint(snapshot()); writeHash();
-}
-scrim.addEventListener('click', closeDrawer);
-board.addEventListener('click', e=>{
-  const go=e.target.closest('[data-go]'); if(go) return choose(go.dataset.go);
-  const cp=e.target.closest('[data-copy]'); if(cp) return copyStage(e.shiftKey);
-  const sh=e.target.closest('[data-share]'); if(sh) return shareStage();
-  const d=e.target.closest('.col-sift'); if(d) return openSift(d.dataset.scope);
-  const c=e.target.closest('.card'); if(c) return openDrawer(c.dataset.id);
-  const h=e.target.closest('[data-stage]'); if(h) setStage(h.dataset.stage);
-});
-
-/* ------------------------------ copy out ------------------------------
-   Whatever comes out of a sift ends up somewhere else — a message, an issue, a
-   slide. Markdown is the format every one of those reads. */
-function listMarkdown(g, withBody){
-  return g.map((x,i)=>{
-    let s = `${i+1}. ${x.title}`;
-    if(x.reason) s += ` — ${REASON[x.reason]||x.reason}`;
-    if(x.note) s += `\n   ${x.note}`;
-    if(withBody && x.body) s += `\n\n   ${x.body.trim().replace(/\n/g,'\n   ')}\n`;
-    return s;
-  }).join('\n') + '\n';
-}
-function stageMarkdown(withBody){
-  if(allMode) return allBoards.map(bd=>
-    `## ${bd.name} · ${labelOf(bd,ALL_LANE)}\n\n` + listMarkdown(kept(bd.id).filter(matches), withBody)
-  ).join('\n');
-  return `## ${B.name} · ${label(stageLane)}\n\n` + listMarkdown(showing(stageLane), withBody);
-}
-const onStage = () => allMode ? ideas.filter(matches) : showing(stageLane);
-async function copyStage(withBody){
-  const n = onStage().length;
-  if(!n) return toast('nothing to copy');
-  try{
-    await navigator.clipboard.writeText(stageMarkdown(withBody));
-    toast(`${n} copied as markdown` + (withBody ? ', bodies and all' : ' · shift for the bodies'));
-  }catch(e){ toast('the clipboard refused: '+e.message); }
-}
-
-/* ------------------------------ share ------------------------------
-   Two of these boards exist to be shown, and showing one meant a screenshot.
-   A link is one lane, read-only, revocable — and it is the only thing in pit
-   that answers without the key, so it says so plainly. */
-async function shareStage(){
-  if(allMode) return toast('share one board’s lane, not the union');
-  try{
-    const r = await api(`/api/boards/${encodeURIComponent(B.slug)}/shares`);
-    drawShare((r.shares||[]).find(x=>x.lane===stageLane) || null);
-  }catch(e){ toast(e.message); }
-}
-const shareURL = t => `${location.origin}/s/${t}`;
-function drawShare(sh){
-  openSheet(`<h2>Share ${esc(label(stageLane))}</h2>
-    ${sh ? `<label class="field"><span>Anyone with this link can read it</span>
-        <input id="shUrl" readonly value="${esc(shareURL(sh.token))}"></label>
-      <p class="lbl">${inLane(stageLane).length} card${inLane(stageLane).length===1?'':'s'} — titles, notes and
-        bodies, as they stand. No other lane, no way back into the board.</p>`
-      : `<p class="lbl">A read-only page holding just this lane, for someone who is not you.
-         The link is the whole credential, so hand it out the way you would a key —
-         and revoke it here when it has done its job.</p>`}
-    <div class="sheet-acts">
-      ${sh?'<button class="ghost danger" id="shKill" type="button">Revoke</button>':''}
-      <button class="ghost" data-close="1" type="button">${sh?'Done':'Cancel'}</button>
-      ${sh ? '<button class="go" id="shCopy" type="button">Copy link</button>'
-           : '<button class="go" id="shGo" type="button">Create link</button>'}
-    </div>`, ()=>{
-    const go=$('shGo');
-    if(go) go.addEventListener('click', async ()=>{
-      try{
-        const made = await api(`/api/boards/${encodeURIComponent(B.slug)}/shares`,
-          {method:'POST', body: JSON.stringify({lane: stageLane})});
-        drawShare(made); toast('link created');
-      }catch(e){ toast(e.message); }
-    });
-    const cp=$('shCopy');
-    if(cp) cp.addEventListener('click', async ()=>{
-      try{ await navigator.clipboard.writeText(shareURL(sh.token)); toast('link copied'); }
-      catch(e){ $('shUrl').select(); toast('the clipboard refused — it is selected'); }
-    });
-    const kill=$('shKill');
-    if(kill) kill.addEventListener('click', async ()=>{
-      if(!kill.classList.contains('armed')){
-        kill.classList.add('armed'); kill.textContent = 'Revoke — the link dies. Click again';
-        setTimeout(()=>{ if(kill.isConnected){ kill.classList.remove('armed'); kill.textContent='Revoke'; } }, 5000);
-        return;
-      }
-      try{ await api('/api/shares/'+encodeURIComponent(sh.token), {method:'DELETE'});
-           closeSheet(); toast('link revoked'); }
-      catch(e){ toast(e.message); }
-    });
-    if($('shUrl')) $('shUrl').select();
-  });
-}
-
-/* ------------------------------ sift ------------------------------
-   One card, four directions. The queue is client-side so a skip costs
-   nothing and the card order stays stable while you work through it. */
-let q=[], scope=null, siftFor=null, busy=false, did={in:0,maybe:0,unsure:0,out:0}, started=0;
-let justVoted=null, enterFrom=null;
-
-// Someone with "Reduce motion" on still gets the fade and the flash; what they
-// do not get is a card flying 280px across the screen.
-const CALM = matchMedia('(prefers-reduced-motion:reduce)').matches;
-const ms = n => CALM ? Math.round(n*.7) : n;
-const far = n => CALM ? Math.round(n*.09) : n;
-const spin = n => CALM ? 0 : n;
-// Where each lane lives, so a card leaves toward the zone that caught it.
-const AWAY = {in:[1,0], out:[-1,0], maybe:[0,-1], unsure:[0,1]};
-const EASE_OUT = 'cubic-bezier(.4,0,.75,.25)', EASE_IN = 'cubic-bezier(.2,.7,.3,1)';
-
-function zoneHTML(l){
-  const hit = justVoted===l;
-  return `<button class="zone ${l}${hit?' hit':''}" type="button" data-lane="${l}">
-    <span class="key">${ARROW[l]}</span><span class="lbl">${esc(label(l))}</span>
-    <span class="n${hit?' bump':''}">${inLane(l).length}</span></button>`;
-}
-function drawCard(){
-  const x = byId(q[0]);
-  if(!x) return drawDone();
-  const said = x.comments||[];
-  const depth = Math.min(2, q.length-1);
-  stage.innerHTML = VOTES.map(zoneHTML).join('') + `
-    <div class="deck"><div class="pile">
-      ${depth>1?'<i class="b2"></i>':''}${depth>0?'<i class="b1"></i>':''}
-      <article class="sift-card" id="siftCard">
-        <span class="src">${x.source==='agent'?'an agent suggested':'you wrote'} · ${ago(x.created_at)} ago</span>
-        <h2>${esc(x.title)}</h2>
-        <div class="jot"><textarea id="jot" rows="1" placeholder="one line — what it is"
-          autocomplete="off">${esc(x.note)}</textarea><span>N</span></div>
-        ${x.body?`<p class="body">${esc(x.body)}</p>`:''}
-        ${said.length?`<div class="said">${said.map(c=>
-          `<p><b class="${c.who==='agent'?'agent':''}">${c.who==='agent'?'an agent argues':'you noted'}</b>${esc(c.text)}</p>`
-        ).join('')}</div>`:''}
-      </article>
-    </div></div>`;
-  justVoted = null;
-  fitCard();
-  enter();
-  drawFoot();
-  const j = $('jot');
-  if(j) j.addEventListener('input', ()=>{
-    growJot();
-    const deck = stage.querySelector('.deck'), card = $('siftCard');
-    if(deck && card && card.scrollHeight > deck.clientHeight) fitCard();  // shrink only
-  });
-}
-// The note wraps rather than clipping, so its box has to follow its content —
-// and it has to be right *before* the card is measured.
-function growJot(){
-  const j = $('jot'); if(!j) return;
-  j.style.height = 'auto';
-  j.style.height = j.scrollHeight + 'px';
-}
-/* The card is sized to its text rather than the text to the card: start
-   generous, measure, and scale --fit down until it fits the height it has.
-   Below the floor the body is genuinely long and scrolling is the lesser evil,
-   and .over fades the bottom edge so it is obvious there is more. */
-function fitCard(){
-  const card = $('siftCard'), deck = stage.querySelector('.deck');
-  if(!card || !deck) return;
-  const avail = deck.clientHeight;
-  if(!avail) return;
-  let f = 1.42;
-  const set = v => { f = Math.min(1.42, Math.max(.62, +v.toFixed(3)));
-                     card.style.setProperty('--fit', f); growJot(); };
-  set(f);
-  if(card.scrollHeight > avail) set(f * Math.max(.45, avail / card.scrollHeight));
-  for(let i=0; i<7 && card.scrollHeight > avail && f > .621; i++) set(f - .05);
-  card.classList.toggle('over', card.scrollHeight > card.clientHeight + 1);
-}
-addEventListener('resize', ()=>{ if(siftEl.classList.contains('on')) fitCard(); });
-// Measuring before the webfont lands sizes the card against fallback metrics.
-document.fonts.ready.then(()=>{ if(siftEl.classList.contains('on')) fitCard(); });
-
-/* Resting transforms of the two cards showing behind this one, and one step
-   further back — the pile advances by animating between them. */
-const REST = {b1:'translateY(13px) scaleX(.985)', b2:'translateY(25px) scaleX(.968)'};
-const BACK = {b1:'translateY(25px) scaleX(.968)', b2:'translateY(38px) scaleX(.95)'};
-const ghost = k => stage.querySelector('.deck i.'+k);
-
-function enter(){
-  const card = $('siftCard'); if(!card) return;
-  const [dx,dy] = enterFrom ? AWAY[enterFrom] : [0,0];
-  const back = enterFrom
-    ? {transform:`translate(${far(dx*180)}px,${far(dy*110)}px) rotate(${spin(dx*3)}deg) scale(.95)`, opacity:0}
-    : {transform:REST.b1, opacity:.4};          // it rises out of the pile
-  enterFrom = null;
-  card.animate([back, {transform:'none', opacity:1}],
-    {duration: ms(dx||dy ? 300 : 240), easing: EASE_IN});
-  for(const k of ['b1','b2']){
-    const g = ghost(k);
-    if(g) g.animate([{transform:BACK[k], opacity:0}, {}], {duration: ms(320), easing: EASE_IN});
-  }
-}
-/* Never let the UI wait on an animation: Chrome pauses them in a backgrounded
-   tab, so awaiting `finished` there freezes the sift on a card that has already
-   been decided. The clock wins if the animation does not report back. */
-const settle = (p, cap) => Promise.race([p, new Promise(r=>setTimeout(r, cap))]);
-
-function leave(lane){
-  const card = $('siftCard');
-  if(!card) return Promise.resolve();
-  const [dx,dy] = AWAY[lane] || [0,0];
-  // the pile closes the gap while the card is still in the air
-  const b1 = ghost('b1'), b2 = ghost('b2');
-  if(b1) b1.animate([{}, {transform:'none', opacity:1}],
-    {duration: ms(240), easing: EASE_IN, fill:'forwards'});
-  if(b2) b2.animate([{}, {transform:REST.b1, opacity:.85}],
-    {duration: ms(240), easing: EASE_IN, fill:'forwards'});
-  const a = card.animate(
-    [{transform:'none', opacity:1},
-     {transform:`translate(${far(dx*280)}px,${far(dy*160)}px) rotate(${spin(dx*4)}deg) scale(.93)`, opacity:0}],
-    {duration: ms(240), easing: EASE_OUT, fill:'forwards'});
-  return a.finished.catch(()=>{});
-}
-function drawFoot(){
-  const done = started - q.length, pct = started ? Math.round(done/started*100) : 0;
-  const tally = VOTES.filter(l=>did[l]).map(l=>
-    `<span class="${l===lastLane?'just':''}">${ARROW[l]}<b>${did[l]}</b></span>`).join(' ');
-  sfoot.innerHTML =
-    `<span class="left-n tick">${q.length} left</span>
-     <span class="meter"><i class="${pct===100?'full':''}" style="width:${pct}%"></i></span>
-     <span class="tally">${tally||'nothing yet'}</span>
-     <span>→ in · ← out · ↑ maybe · ↓ unsure · space skip · u undo · n note</span>`;
-}
-let lastLane = null;
-function drawDone(){
-  const top = inLane('in').slice(0,5);
-  const total = VOTES.reduce((n,l)=>n+did[l],0);
-  const next = ['unsorted','unsure','maybe'].find(l=>l!==scope && inLane(l).length);
-  stage.innerHTML = `<div class="done">
-    <h2>${scope==='unsorted'?'Queue clear.':'Pass done.'}</h2>
-    <p>${total
-      ? `${total} decided — ${VOTES.map(l=>`${did[l]} ${label(l)}`).join(', ')}. ${esc(label('in'))} is what you meant to keep; drag it into the order you want.`
-      : 'Nothing decided this pass.'}</p>
-    ${top.length?`<ol>${top.map((x,i)=>`<li style="animation-delay:${.18+i*.05}s">${esc(x.title)}<span>${esc(label('in'))}</span></li>`).join('')}</ol>`:''}
-    <div class="done-acts">
-      <button class="ghost" id="doneBack" type="button">Back to board</button>
-      ${next?`<button class="go" id="doneNext" type="button">Sift ${esc(label(next))} <span class="n">${inLane(next).length}</span></button>`:''}
-    </div></div>`;
-  $('doneBack').addEventListener('click', closeSift);
-  if(next) $('doneNext').addEventListener('click', ()=>openSift(next));
-  drawFoot();
-}
-async function vote(lane){
-  if(busy || !q.length) return;
-  const id = q[0];
-  busy = true; lastLane = lane;
-  if(navigator.vibrate) navigator.vibrate(9);
-  const flying = leave(lane);
-  try{
-    const jot = $('jot'), it = byId(id);
-    if(jot && it && jot.value.trim() !== (it.note||'')){
-      await api('/api/ideas/'+id, {method:'PATCH', body:JSON.stringify({note: jot.value.trim()})});
-      it.note = jot.value.trim();
-    }
-    const r = await api(`/api/boards/${encodeURIComponent(B.slug)}/sift`,
-      {method:'POST', body: JSON.stringify({idea:id, lane})});
-    Object.assign(byId(id)||{}, r);
-    ideas.sort(order);
-    did[lane]++; q.shift(); justVoted = lane;
-  }catch(e){
-    toast(e.message); busy = false;
-    stage.querySelectorAll('.sift-card, .deck i').forEach(el=>
-      el.getAnimations().forEach(a=>a.reverse()));
-    return;
-  }
-  await settle(flying, ms(240) + 90);
-  busy = false; drawCard();
-}
-async function skip(){
-  if(busy || q.length<2) return;
-  busy = true;
-  const card = $('siftCard');
-  if(card) await settle(card.animate(
-    [{transform:'none',opacity:1},{transform:`translateY(${far(34)}px) scale(.93)`,opacity:0}],
-    {duration: ms(190), easing: EASE_OUT, fill:'forwards'}).finished.catch(()=>{}), ms(190) + 90);
-  q.push(q.shift()); busy = false; drawCard();
-  toast('skipped — it comes back at the end of this pass');
-}
-async function undo(){
-  if(busy) return;
-  if(allMode) return toast('open a board to take back a call on it');
-  busy = true;
-  try{
-    const it = await api(`/api/boards/${encodeURIComponent(B.slug)}/sift/undo`, {method:'POST'});
-    const i = ideas.findIndex(x=>x.id===it.id);
-    // Where it sat before the undo is the vote we are taking back.
-    const undone = i>=0 ? ideas[i].lane : null;
-    if(i>=0) Object.assign(ideas[i], it); else ideas.push(it);
-    ideas.sort(order);
-    if(undone && did[undone]) did[undone]--;
-    if(siftEl.classList.contains('on')){
-      if(q[0]!==it.id) q.unshift(it.id);
-      enterFrom = undone;           // it flies back in from wherever it went
-      lastLane = null; drawCard();
-    } else { paint(snapshot()); }
-    toast(`back in ${label(it.lane)}`);
-  }catch(e){ toast(e.message==='not found' ? 'nothing to undo' : e.message); }
-  busy = false;
-}
-function openSift(l){
-  if(allMode) return toast('open a board to sift it');
-  scope = l || nextScope();
-  if(!scope || !inLane(scope).length) return toast('nothing to sift');
-  q = inLane(scope).map(x=>x.id);
-  started = q.length; did = {in:0,maybe:0,unsure:0,out:0}; siftFor = B.slug;
-  justVoted = null; lastLane = null; enterFrom = null;
-  sscope.textContent = 'sifting ' + label(scope);
-  $('siftBoard').textContent = B.name;
-  $('siftDesc').textContent = B.description || '';
-  closePop();                       // it sits above the overlay otherwise
-  siftEl.classList.add('on'); siftEl.setAttribute('aria-hidden','false');
-  drawCard(); writeHash();
-}
-async function closeSift(){
-  siftEl.classList.remove('on'); siftEl.setAttribute('aria-hidden','true');
-  const n = VOTES.reduce((a,l)=>a+did[l],0);
-  await reload(); writeHash();
-  if(n) toast(`${n} sifted`);
-  $('siftBtn').focus();
-}
-stage.addEventListener('click', e=>{
-  const z = e.target.closest('.zone'); if(z) vote(z.dataset.lane);
-});
-$('siftBtn').addEventListener('click', ()=>openSift(null));
-$('closeSift').addEventListener('click', closeSift);
-$('undoSift').addEventListener('click', undo);
-$('undoBtn').addEventListener('click', undo);
-
-/* Swipe is the same four votes on a phone, where the zones are thumbs-width. */
-let tx=0, ty=0;
-stage.addEventListener('touchstart', e=>{ const t=e.changedTouches[0]; tx=t.clientX; ty=t.clientY; }, {passive:true});
-stage.addEventListener('touchend', e=>{
-  if(!e.target.closest('.sift-card')) return;
-  const t=e.changedTouches[0], dx=t.clientX-tx, dy=t.clientY-ty;
-  if(Math.max(Math.abs(dx),Math.abs(dy)) < 60) return;
-  const lane = Math.abs(dx)>Math.abs(dy) ? (dx>0?'in':'out') : (dy<0?'maybe':'unsure');
-  vote(lane);
-}, {passive:true});
 
 /* ------------------------------ sheets ------------------------------ */
 function openSheet(html, onOpen){
@@ -1446,6 +244,10 @@ function openSheet(html, onOpen){
 }
 function closeSheet(){ sheet.classList.remove('on'); sheet.setAttribute('aria-hidden','true'); }
 sheet.addEventListener('click', e=>{ if(e.target.dataset.close) closeSheet(); });
+
+async function loadBoards(){ boards = (await api('/api/boards')).boards || []; }
+async function openBoard(s, at){ slug = s; allMode = false; await P.use(boardStore(s), at); }
+async function openAll(){ slug = null; allMode = true; await P.use(allStore()); }
 
 function newBoard(){
   openSheet(`<h2>New board</h2>
@@ -1458,9 +260,8 @@ function newBoard(){
     $('nbGo').addEventListener('click', async ()=>{
       const name=$('nbName').value.trim(); if(!name) return toast('a board needs a name');
       try{
-        const b = await api('/api/boards',{method:'POST',body:JSON.stringify({
-          name, description:$('nbDesc').value.trim()})});
-        closeSheet(); await loadBoards(); await loadBoard(b.slug); paint(null); writeHash();
+        const b = await api('/api/boards',{method:'POST',body:JSON.stringify({name, description:$('nbDesc').value.trim()})});
+        closeSheet(); await loadBoards(); await openBoard(b.slug); writeHash();
         toast('board created');
       }catch(e){ toast(e.message); }
     });
@@ -1469,12 +270,13 @@ function newBoard(){
 $('newBoardBtn').addEventListener('click', newBoard);
 
 function editBoard(){
-  const bv = boards.find(x=>x.slug===B.slug) || {ideas:0};
+  const B = P.board;
+  const bv = boards.find(x=>x.slug===slug) || {ideas:0};
   openSheet(`<h2>Board</h2>
     <label class="field"><span>Name</span><input id="bdName" value="${esc(B.name)}"></label>
     <label class="field"><span>Description</span><textarea id="bdText" rows="3"
       placeholder="What is this board for?">${esc(B.description)}</textarea></label>
-    <span class="lbl">Lane names — blank means the lane's own name</span>
+    <span class="lbl">Lane names, blank means the lane's own name</span>
     <div class="lanes4 field">${LANES.map(l=>
       `<input id="lb-${l}" placeholder="${l}" value="${esc((B.labels&&B.labels[l])||'')}">`).join('')}</div>
     <div class="sheet-acts">
@@ -1484,15 +286,12 @@ function editBoard(){
     $('bdText').focus();
     $('bdGo').addEventListener('click', async ()=>{
       const labels={}; LANES.forEach(l=>{ const el=$('lb-'+l); if(el) labels[l]=el.value.trim(); });
-      try{ await api('/api/boards/'+encodeURIComponent(B.slug),{method:'PATCH',
+      try{ await api('/api/boards/'+encodeURIComponent(slug),{method:'PATCH',
              body:JSON.stringify({name:$('bdName').value.trim(), description:$('bdText').value.trim(), labels})});
-           closeSheet(); await loadBoards(); await reload();
-           $('boardBtnName').textContent = B.name; toast('saved'); }
+           closeSheet(); await loadBoards(); await P.reload(); toast('saved'); }
       catch(e){ toast(e.message); }
     });
-    /* Two clicks, and the second one says exactly what it destroys. Deleting a
-       board takes every idea on it with it, and there is no undo for that —
-       burying is what "get it out of the way" means here. */
+    /* Two clicks, and the second one says exactly what it destroys. */
     const del = $('bdDel');
     del.addEventListener('click', async ()=>{
       if(!del.classList.contains('armed')){
@@ -1502,79 +301,105 @@ function editBoard(){
         return;
       }
       try{
-        await api('/api/boards/'+encodeURIComponent(B.slug), {method:'DELETE'});
-        closeSheet(); sel=null; B=null; ideas=[];
-        await loadBoards();
-        if(boards.length){ await loadBoard(boards[0].slug); paint(null); writeHash(); }
-        else { board.innerHTML = '<div style="padding:40px;color:var(--muted)">No boards yet. Create one to start.</div>';
-               $('boardBtnName').textContent = '—'; bdesc.textContent=''; }
+        await api('/api/boards/'+encodeURIComponent(slug), {method:'DELETE'});
+        closeSheet(); await loadBoards();
+        if(boards.length){ await openBoard(boards[0].slug); writeHash(); }
         toast('board deleted');
       }catch(e){ toast(e.message); }
     });
   });
 }
-bdesc.addEventListener('click', ()=>{ if(!allMode) editBoard(); });
+
+/* ------------------------------ share ------------------------------
+   A link is one lane, read-only, revocable, and it is the only thing in pit
+   that answers without the key, so it says so plainly. */
+async function shareStage(lane){
+  try{
+    const r = await api(`/api/boards/${encodeURIComponent(slug)}/shares`);
+    drawShare(lane, (r.shares||[]).find(x=>x.lane===lane) || null);
+  }catch(e){ toast(e.message); }
+}
+const shareURL = t => `${location.origin}/s/${t}`;
+function drawShare(lane, sh){
+  const label = (P.board.labels && P.board.labels[lane]) || lane;
+  const n = P.cards.filter(x=>x.lane===lane).length;
+  openSheet(`<h2>Share ${esc(label)}</h2>
+    ${sh ? `<label class="field"><span>Anyone with this link can read it</span>
+        <input id="shUrl" readonly value="${esc(shareURL(sh.token))}"></label>
+      <p class="lbl">${n} card${n===1?'':'s'}: titles, notes and bodies, as they stand. No other lane, no way back into the board.</p>`
+      : `<p class="lbl">A read-only page holding just this lane, for someone who is not you.
+         The link is the whole credential, so hand it out the way you would a key,
+         and revoke it here when it has done its job.</p>`}
+    <div class="sheet-acts">
+      ${sh?'<button class="ghost danger" id="shKill" type="button">Revoke</button>':''}
+      <button class="ghost" data-close="1" type="button">${sh?'Done':'Cancel'}</button>
+      ${sh ? '<button class="go" id="shCopy" type="button">Copy link</button>'
+           : '<button class="go" id="shGo" type="button">Create link</button>'}
+    </div>`, ()=>{
+    $('shGo')?.addEventListener('click', async ()=>{
+      try{
+        const made = await api(`/api/boards/${encodeURIComponent(slug)}/shares`, {method:'POST', body: JSON.stringify({lane})});
+        drawShare(lane, made); toast('link created');
+      }catch(e){ toast(e.message); }
+    });
+    $('shCopy')?.addEventListener('click', async ()=>{
+      try{ await navigator.clipboard.writeText(shareURL(sh.token)); toast('link copied'); }
+      catch(e){ $('shUrl').select(); toast('the clipboard refused, it is selected'); }
+    });
+    const kill=$('shKill');
+    if(kill) kill.addEventListener('click', async ()=>{
+      if(!kill.classList.contains('armed')){
+        kill.classList.add('armed'); kill.textContent = 'Revoke, the link dies. Click again';
+        setTimeout(()=>{ if(kill.isConnected){ kill.classList.remove('armed'); kill.textContent='Revoke'; } }, 5000);
+        return;
+      }
+      try{ await api('/api/shares/'+encodeURIComponent(sh.token), {method:'DELETE'}); closeSheet(); toast('link revoked'); }
+      catch(e){ toast(e.message); }
+    });
+    if($('shUrl')) $('shUrl').select();
+  });
+}
 
 /* ------------------------------ routing ------------------------------
-   Every view has an address so a board, a card or a sift pass is a link worth
-   keeping: #/<board>, #/<board>/<ideaId>, #/<board>/lane/<lane>,
-   #/<board>/sift[/<lane>]  */
+   #/<board>, #/<board>/<ideaId>, #/<board>/lane/<lane>, #/<board>/sift[/<lane>], #/all */
 function writeHash(){
   if(routing) return;
-  if(allMode){
-    if(location.hash !== '#/all'){ routing=true; history.pushState(null,'','#/all'); routing=false; }
-    return;
+  let h;
+  if(allMode) h = '#/all';
+  else if(!slug) return;
+  else {
+    const v = P.view;
+    h = '#/'+slug;
+    if(v.sift) h += '/sift'+(v.sift!=='unsorted'?'/'+v.sift:'');
+    else if(v.open) h += '/'+v.open;
+    else if(v.stage!=='in') h += '/lane/'+v.stage;
   }
-  if(!B) return;
-  let h = '#/'+B.slug;
-  if(siftEl.classList.contains('on')) h += '/sift'+(scope&&scope!=='unsorted'?'/'+scope:'');
-  else if(sel) h += '/'+sel;
-  else if(stageLane!=='in') h += '/lane/'+stageLane;
   if(location.hash !== h){ routing=true; history.pushState(null,'',h); routing=false; }
 }
 async function readHash(){
   const parts = (location.hash||'').replace(/^#\/?/,'').split('/').filter(Boolean);
-  if(parts[0]==='all'){
-    if(siftEl.classList.contains('on')){
-      siftEl.classList.remove('on'); siftEl.setAttribute('aria-hidden','true');
-    }
-    if(sel) closeDrawer();
-    await loadAll(); paint(null);
-    return;
-  }
-  const slug = parts[0] && boards.some(b=>b.slug===parts[0]) ? parts[0] : (boards[0]&&boards[0].slug);
-  if(!slug){ board.innerHTML = '<div style="padding:40px;color:var(--muted)">No boards yet. Create one to start.</div>'; return; }
-  if(!B || B.slug!==slug) await loadBoard(slug);
-  // A bare board URL means the answer; /lane/<x> puts another one on the stage.
-  if(parts[1]==='lane') stageLane = SECTIONS.includes(parts[2]) ? parts[2] : 'in';
-  else if(!parts[1]) stageLane = 'in';
-  paint(null);
-
+  if(parts[0]==='all'){ if(!allMode) await openAll(); await P.closeSift(); P.closeDrawer(); return; }
+  const s = parts[0] && boards.some(b=>b.slug===parts[0]) ? parts[0] : (boards[0]&&boards[0].slug);
+  if(!s){ toast('No boards yet. Create one to start.'); return; }
+  const lane = parts[1]==='lane' && SECTIONS.includes(parts[2]) ? parts[2] : 'in';
+  if(allMode || slug!==s) await openBoard(s, {stage: lane}); else P.setStage(lane);
   if(parts[1]==='sift'){
     const want = parts[2]||null;
-    if(!siftEl.classList.contains('on') || siftFor!==B.slug || (want && want!==scope)) openSift(want);
+    if(!P.view.sift || (want && want!==P.view.sift)) P.sift(want);
     return;
   }
-  if(siftEl.classList.contains('on')){
-    siftEl.classList.remove('on'); siftEl.setAttribute('aria-hidden','true');
-  }
-  if(parts[1]==='lane') return;
-  if(parts[1] && byId(parts[1])){ if(sel!==parts[1]) await openDrawer(parts[1]); }
-  else if(sel){ closeDrawer(); }
+  await P.closeSift();
+  if(parts[1] && parts[1]!=='lane' && P.cards.some(x=>x.id===parts[1])){ if(P.view.open!==parts[1]) await P.open(parts[1]); }
+  else P.closeDrawer();
 }
-window.addEventListener('hashchange', ()=>{ if(routing) return; routing=true; readHash().finally(()=>routing=false); });
+addEventListener('hashchange', ()=>{ if(routing) return; routing=true; readHash().finally(()=>routing=false); });
 
 /* ------------------------------ board picker ------------------------------ */
 let popAt = 0, popRows = [];
-
 function renderPop(){
   const query = popQ.value.trim().toLowerCase();
-  popRows = boards.filter(b =>
-    !query || b.name.toLowerCase().includes(query) || (b.description||'').toLowerCase().includes(query));
+  popRows = boards.filter(b => !query || b.name.toLowerCase().includes(query) || (b.description||'').toLowerCase().includes(query));
   if(popAt >= popRows.length) popAt = Math.max(0, popRows.length-1);
-
-  // The picker was already the only across-boards view there is; this is the
-  // one row that answers the across-boards question rather than picking one.
   const total = boards.reduce((n,b)=>n+((b.counts&&b.counts.in)||0), 0);
   popAll.hidden = !!query;
   popAll.innerHTML = query ? '' : `<button class="pop-row every${allMode?' at':''}" type="button" data-all="1">
@@ -1582,13 +407,11 @@ function renderPop(){
       <span class="mid"><span class="nm">everything${allMode?'<em>here</em>':''}</span>
         <span class="ds">every board's ${esc(ALL_LANE)} lane, on one stage</span></span>
       <span class="ct">${total} kept</span></button>`;
-
   popList.innerHTML = popRows.length ? popRows.map((b,i)=>{
-    const c = b.counts||{}, waiting = c.unsorted||0, here = B && b.slug===B.slug;
+    const c = b.counts||{}, waiting = c.unsorted||0, here = !allMode && b.slug===slug;
     const live = (b.ideas||0)-(c.out||0);
     return `<button class="pop-row${waiting?'':' clear'}${i===popAt?' at':''}" role="option"
-      aria-selected="${here}" data-slug="${esc(b.slug)}" title="${waiting
-        ? waiting+' waiting to be sifted' : 'nothing waiting'}">
+      aria-selected="${here}" data-slug="${esc(b.slug)}" title="${waiting ? waiting+' waiting to be sifted' : 'nothing waiting'}">
       <span class="dot"></span>
       <span class="mid">
         <span class="nm">${esc(b.name)}${here?'<em>here</em>':''}</span>
@@ -1597,36 +420,23 @@ function renderPop(){
       <span class="ct">${waiting?`<b>${waiting}</b> to sift`:`${live} live`}</span>
     </button>`;
   }).join('') : `<div class="pop-empty">No board matches “${esc(popQ.value)}”.</div>`;
-
-  const at = popList.querySelector('.pop-row.at');
-  if(at) at.scrollIntoView({block:'nearest'});
+  popList.querySelector('.pop-row.at')?.scrollIntoView({block:'nearest'});
 }
 async function openPop(){
   boardPop.hidden = false; boardBtn.setAttribute('aria-expanded','true');
-  popQ.value=''; popAt = Math.max(0, boards.findIndex(b=>B&&b.slug===B.slug));
+  popQ.value=''; popAt = Math.max(0, boards.findIndex(b=>b.slug===slug));
   renderPop(); popQ.focus();
-  /* Counts go stale while you work, and this list is where you decide which
-     board needs you — so refresh behind the open panel. */
   try{ await loadBoards(); if(!boardPop.hidden) renderPop(); }catch(_){}
 }
-function closePop(){
-  boardPop.hidden = true; boardBtn.setAttribute('aria-expanded','false');
-}
-async function choose(slug){
+function closePop(){ boardPop.hidden = true; boardBtn.setAttribute('aria-expanded','false'); }
+async function choose(s){
   closePop();
-  if(!allMode && B && slug===B.slug) return;
-  sel=null; drawer.classList.remove('on'); scrim.classList.remove('on');
-  try{ await loadBoard(slug); paint(null); writeHash(); }
-  catch(e){ toast(e.message); }
+  if(!allMode && s===slug) return;
+  try{ await openBoard(s); writeHash(); } catch(e){ toast(e.message); }
 }
 boardBtn.addEventListener('click', ()=> boardPop.hidden ? openPop() : closePop());
-popList.addEventListener('click', e=>{
-  const r = e.target.closest('.pop-row'); if(r) choose(r.dataset.slug);
-});
-popAll.addEventListener('click', async ()=>{
-  closePop();
-  try{ await loadAll(); paint(null); writeHash(); }catch(e){ toast(e.message); }
-});
+popList.addEventListener('click', e=>{ const r = e.target.closest('.pop-row'); if(r) choose(r.dataset.slug); });
+popAll.addEventListener('click', async ()=>{ closePop(); try{ await openAll(); writeHash(); }catch(e){ toast(e.message); } });
 popQ.addEventListener('input', ()=>{ popAt=0; renderPop(); });
 popQ.addEventListener('keydown', e=>{
   if(e.key==='ArrowDown'){ e.preventDefault(); popAt=Math.min(popAt+1,popRows.length-1); renderPop(); }
@@ -1635,54 +445,11 @@ popQ.addEventListener('keydown', e=>{
   else if(e.key==='Escape'){ e.preventDefault(); closePop(); boardBtn.focus(); }
 });
 $('popNew').addEventListener('click', ()=>{ closePop(); newBoard(); });
+document.addEventListener('click', e=>{ if(!boardPop.hidden && !e.target.closest('.boardsel')) closePop(); });
 
-/* ------------------------------ find ------------------------------ */
-function setQuery(v){
-  query = v.trim().toLowerCase();
-  find.classList.toggle('hit', !!query);
-  paint(null);
-}
-find.addEventListener('input', ()=> setQuery(find.value));
-find.addEventListener('keydown', e=>{
-  if(e.key==='Escape'){ e.preventDefault(); find.value=''; setQuery(''); find.blur(); }
-  else if(e.key==='Enter'){ e.preventDefault(); find.blur(); }
-});
-document.addEventListener('click', e=>{
-  if(!boardPop.hidden && !e.target.closest('.boardsel')) closePop();
-});
-
-/* ------------------------------ keys, theme, toast ------------------------------ */
-document.addEventListener('keydown', e=>{
-  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-  if(sheet.classList.contains('on')){ if(e.key==='Escape'){e.preventDefault();closeSheet();} return; }
-  if(!boardPop.hidden){ if(e.key==='Escape'){ e.preventDefault(); closePop(); boardBtn.focus(); } return; }
-
-  if(siftEl.classList.contains('on')){
-    if(e.key==='Escape'){ e.preventDefault(); if(typing){ document.activeElement.blur(); return; } closeSift(); return; }
-    if(typing){ if(e.key==='Enter'){ e.preventDefault(); document.activeElement.blur(); } return; }
-    if(KEYLANE[e.key]){ e.preventDefault(); vote(KEYLANE[e.key]); }
-    else if(e.key===' '){ e.preventDefault(); skip(); }
-    else if(e.key==='u'||e.key==='U'||e.key==='Backspace'){ e.preventDefault(); undo(); }
-    else if(e.key==='n'||e.key==='N'){ const j=$('jot'); if(j){ e.preventDefault(); j.focus(); j.select(); } }
-    return;
-  }
-  if(drawer.classList.contains('on')){ if(e.key==='Escape'){ e.preventDefault(); document.activeElement.blur(); closeDrawer(); } return; }
-  if(typing || e.metaKey || e.ctrlKey || e.altKey) return;   // ⌘S is the browser's
-  if(e.key==='b'||e.key==='B'){ e.preventDefault(); openPop(); }
-  else if(e.key==='s'||e.key==='S'){ e.preventDefault(); openSift(null); }
-  else if(e.key==='u'||e.key==='U'){ e.preventDefault(); undo(); }
-  else if(e.key==='/'){ e.preventDefault(); find.focus(); find.select(); }
-  else if(e.key==='c'||e.key==='C'){ e.preventDefault(); copyStage(e.shiftKey); }
-});
-
-let tt=null;
-function toast(m){
-  const el=$('toast'); el.textContent=m; el.classList.add('on');
-  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('on'),2800);
-}
-/* Three states, not two: system is the default and it stays live, so the board
-   follows a `theme` flip on the desktop without being touched. Only an explicit
-   light/dark choice writes data-theme. */
+/* ------------------------------ theme ------------------------------
+   Three states: system stays live, so the board follows a desktop flip;
+   only an explicit light or dark choice writes data-theme. */
 const tb=$('themeBtn'), MODES=['system','light','dark'];
 const sysDark = ()=>matchMedia('(prefers-color-scheme:dark)').matches;
 let mode='system';
@@ -1692,8 +459,7 @@ function applyTheme(){
   if(mode==='system') delete r.dataset.theme; else r.dataset.theme=mode;
   tb.textContent = mode==='system' ? `auto · ${sysDark()?'dark':'light'}` : mode;
   tb.title = mode==='system' ? 'Following the system. Click to pin light.'
-           : mode==='light'  ? 'Pinned light. Click to pin dark.'
-                             : 'Pinned dark. Click to follow the system again.';
+           : mode==='light'  ? 'Pinned light. Click to pin dark.' : 'Pinned dark. Click to follow the system again.';
 }
 tb.addEventListener('click', ()=>{
   mode = MODES[(MODES.indexOf(mode)+1)%MODES.length];
@@ -1704,11 +470,9 @@ matchMedia('(prefers-color-scheme:dark)').addEventListener('change', ()=>{ if(mo
 applyTheme();
 
 /* ------------------------------ boot ------------------------------ */
-(async function(){
-  try{ await loadBoards(); await readHash(); }
-  catch(e){ toast(e.message); }
-})();
-})();
+try{ await loadBoards(); routing=true; await readHash(); }
+catch(e){ toast(e.message); }
+finally{ routing=false; }
 </script>
 </body>
 </html>
