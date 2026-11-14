@@ -241,8 +241,10 @@ and anything else can mount the same thing.
 ```
 
 `/pit.js` is the one file pit serves without the key (with
-`Access-Control-Allow-Origin: *`), so a page anywhere can load it. Or copy the
-file, or depend on the repo (`package.json` exports it). `examples/index.html`
+`Access-Control-Allow-Origin: *`), so a page anywhere can load it. Without a
+pit of your own, load it from the repo through a CDN
+(`https://cdn.jsdelivr.net/gh/zcag/pit@main/web/pit.js`), copy the file, or
+depend on the repo (`package.json` exports it). `examples/index.html`
 is a whole page: serve the repo root with any static server and open
 `/examples/`.
 

@@ -4,3 +4,4 @@ bin/
 *.db-shm
 deploy/pit.service
 local.mk
+CLAUDE.local.md
