@@ -4,7 +4,7 @@ go 1.26.7
 
 require (
 	github.com/oklog/ulid/v2 v2.1.2
-	github.com/zcag/mcpauth v0.0.0-20260907200557-02a6402dec44
+	github.com/zcag/mcpauth v0.0.0-20260915213651-fdb02aba00a1
 	modernc.org/sqlite v1.57.0
 )
 

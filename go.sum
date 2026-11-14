@@ -21,8 +21,8 @@ github.com/oklog/ulid/v2 v2.1.2/go.mod h1:rcEKHmBBKfef9DhnvX7y1HZBYxjXb0cP5ExxNs
 github.com/pborman/getopt v0.0.0-20170112200414-7148bc3a4c30/go.mod h1:85jBQOZwpVEaDAr341tbn15RS4fCAsIst0qp7i8ex1o=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
-github.com/zcag/mcpauth v0.0.0-20260907200557-02a6402dec44 h1:uHzb8oZqVNTEGlKf8e0pqkfvTJUwznKcS6DLgSyJNT8=
-github.com/zcag/mcpauth v0.0.0-20260907200557-02a6402dec44/go.mod h1:fLpvIRx15FYoQj1fSQ+484O4YB5jAZsgYJ8hXUYgeLI=
+github.com/zcag/mcpauth v0.0.0-20260915213651-fdb02aba00a1 h1:uHGipwVwoD4KBDToSXYnJACmsffBXkZrzVsLl0B1DdU=
+github.com/zcag/mcpauth v0.0.0-20260915213651-fdb02aba00a1/go.mod h1:fLpvIRx15FYoQj1fSQ+484O4YB5jAZsgYJ8hXUYgeLI=
 golang.org/x/mod v0.37.0 h1:vF1DjpVEshcIqoEaauuHebaLk1O1forxjxBaVn884JQ=
 golang.org/x/mod v0.37.0/go.mod h1:m8S8VeM9r4dzDwjrKO0a1sZP3YjeMamRRlD+fmR2Q/0=
 golang.org/x/sync v0.21.0 h1:HLII4xRRTtCRkxYp4HNFF0Js/Og6q2i++KXbg0gHCwM=
